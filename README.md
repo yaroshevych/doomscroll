@@ -8,6 +8,8 @@ Your vault is already a curated, ranked feed: every note passed your own bar for
 
 Social apps nailed the *consumption* layer — scroll-based UX, bite-sized cards, mobile-first, serendipity over chronology. PKM Feed steals that layer and points it at your own vault. Same scroll, your content.
 
+<img src="https://github.com/user-attachments/assets/ea19fad7-01bf-497f-bf1a-3fd3fb48f5de" height="400px" alt="PKM Feed Mobile" />
+
 ## Features
 
 - **Random card feed** — notes surface in shuffled order, not last-modified
