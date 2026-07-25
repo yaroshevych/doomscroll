@@ -37,6 +37,7 @@ export class ScrollView extends ItemView {
 
   private async render(): Promise<void> {
     this.containerEl.empty();
+    this.containerEl.addClass('scroll-view-container');
 
     // Header row
     const header = this.containerEl.createDiv('scroll-header');
