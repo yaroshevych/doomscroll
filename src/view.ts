@@ -12,6 +12,8 @@ export class ScrollView extends ItemView {
   hasRendered: boolean = false;
   currentBatch: NotePreview[] = [];
   imageObserver: IntersectionObserver | null = null;
+  cardObserver: IntersectionObserver | null = null;
+  viewedPathsInBatch: Set<string> = new Set();
 
   constructor(leaf: WorkspaceLeaf, plugin: ObsidianScrollPlugin) {
     super(leaf);
@@ -112,6 +114,38 @@ export class ScrollView extends ItemView {
       );
     }
 
+    // Stop observing cards from the previous batch before replacing them.
+    this.cardObserver?.disconnect();
+    this.viewedPathsInBatch.clear();
+
+    this.cardObserver = new IntersectionObserver(
+      (entries) => {
+        let historyChanged = false;
+
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+
+          const card = entry.target as HTMLElement;
+          const path = card.dataset.path;
+          if (path && !this.viewedPathsInBatch.has(path)) {
+            this.viewedPathsInBatch.add(path);
+            this.plugin.data.history = recordView(
+              this.plugin.data.history,
+              path,
+              Date.now()
+            );
+            historyChanged = true;
+          }
+          this.cardObserver?.unobserve(card);
+        }
+
+        if (historyChanged) {
+          void this.plugin.saveSettings();
+        }
+      },
+      { root: container, threshold: 0.1 }
+    );
+
     // Clear previous content
     container.empty();
 
@@ -119,6 +153,7 @@ export class ScrollView extends ItemView {
     for (const preview of this.currentBatch) {
       const card = this.renderCard(preview);
       container.appendChild(card);
+      this.cardObserver.observe(card);
     }
 
     // Reshuffle button at end
@@ -143,6 +178,7 @@ export class ScrollView extends ItemView {
   private renderCard(preview: NotePreview): HTMLElement {
     const card = document.createElement('div');
     card.className = 'scroll-card';
+    card.dataset.path = preview.path;
 
     // Title + date row
     const titleRow = card.createEl('div');
@@ -184,13 +220,16 @@ export class ScrollView extends ItemView {
       ) as TFile;
 
       if (file) {
-        // Record view
-        this.plugin.data.history = recordView(
-          this.plugin.data.history,
-          preview.path,
-          Date.now()
-        );
-        await this.plugin.saveSettings();
+        // A very quick tap can happen before IntersectionObserver fires.
+        if (!this.viewedPathsInBatch.has(preview.path)) {
+          this.viewedPathsInBatch.add(preview.path);
+          this.plugin.data.history = recordView(
+            this.plugin.data.history,
+            preview.path,
+            Date.now()
+          );
+          await this.plugin.saveSettings();
+        }
 
         // Open in new leaf
         this.plugin.app.workspace.getLeaf(true).openFile(file);
@@ -244,6 +283,10 @@ export class ScrollView extends ItemView {
   }
 
   onClose(): Promise<void> {
+    if (this.cardObserver) {
+      this.cardObserver.disconnect();
+      this.cardObserver = null;
+    }
     if (this.imageObserver) {
       this.imageObserver.disconnect();
       this.imageObserver = null;
