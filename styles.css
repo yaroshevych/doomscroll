@@ -28,6 +28,7 @@
 }
 
 .scroll-reshuffle-btn,
+.scroll-back-btn,
 .scroll-settings-btn {
   display: flex;
   align-items: center;
@@ -43,8 +44,14 @@
 }
 
 .scroll-reshuffle-btn:hover,
+.scroll-back-btn:hover:not(:disabled),
 .scroll-settings-btn:hover {
   background-color: var(--background-modifier-hover);
+}
+
+.scroll-back-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .scroll-icon {
@@ -155,4 +162,3 @@
 .scroll-reshuffle-end-btn:hover {
   opacity: 0.9;
 }
-

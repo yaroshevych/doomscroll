@@ -14,6 +14,9 @@ export class ScrollView extends ItemView {
   imageObserver: IntersectionObserver | null = null;
   cardObserver: IntersectionObserver | null = null;
   viewedPathsInBatch: Set<string> = new Set();
+  batchHistory: NotePreview[][] = [];
+  batchHistoryCursor: number = -1;
+  backButton: HTMLButtonElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: ObsidianScrollPlugin) {
     super(leaf);
@@ -58,10 +61,16 @@ export class ScrollView extends ItemView {
     reshuffleBtn.setAttribute('aria-label', 'Reshuffle');
     setIcon(reshuffleBtn, 'refresh-cw');
     reshuffleBtn.addEventListener('click', () => {
-      this.currentBatch = [];
-      this.renderBatch();
-      this.containerEl.querySelector('.scroll-body')?.scrollTo({ top: 0 });
+      this.showNewBatch();
     });
+
+    // Previous batch button
+    this.backButton = controls.createEl('button');
+    this.backButton.className = 'scroll-back-btn';
+    this.backButton.setAttribute('aria-label', 'Previous card set');
+    setIcon(this.backButton, 'arrow-left');
+    this.backButton.addEventListener('click', () => this.showPreviousBatch());
+    this.updateBackButton();
 
     // Settings button
     const settingsBtn = controls.createEl('button');
@@ -112,7 +121,11 @@ export class ScrollView extends ItemView {
         this.plugin.data.settings.batchSize,
         Date.now()
       );
+      this.batchHistory.unshift(this.currentBatch);
+      this.batchHistoryCursor = 0;
     }
+
+    this.updateBackButton();
 
     // Stop observing cards from the previous batch before replacing them.
     this.cardObserver?.disconnect();
@@ -162,10 +175,33 @@ export class ScrollView extends ItemView {
     reshuffleBtn.className = 'scroll-reshuffle-end-btn';
     reshuffleBtn.textContent = 'Reshuffle';
     reshuffleBtn.addEventListener('click', () => {
-      this.currentBatch = [];
-      this.renderBatchIntoContainer(container);
-      container.scrollTo({ top: 0 });
+      this.showNewBatch();
     });
+  }
+
+  private showNewBatch(): void {
+    this.currentBatch = [];
+    this.renderBatch();
+    this.containerEl.querySelector('.scroll-body')?.scrollTo({ top: 0 });
+  }
+
+  private showPreviousBatch(): void {
+    const previousCursor = this.batchHistoryCursor + 1;
+    const previousBatch = this.batchHistory[previousCursor];
+    if (!previousBatch) return;
+
+    this.batchHistoryCursor = previousCursor;
+    this.currentBatch = previousBatch;
+    this.renderBatch();
+    this.containerEl.querySelector('.scroll-body')?.scrollTo({ top: 0 });
+  }
+
+  private updateBackButton(): void {
+    if (this.backButton) {
+      this.backButton.disabled =
+        this.batchHistoryCursor < 0 ||
+        this.batchHistoryCursor >= this.batchHistory.length - 1;
+    }
   }
 
   private renderBatch(): void {
