@@ -19,10 +19,12 @@ export function selectBatch(
 
   const recentWeek: NotePreview[] = [];
   const fresh: NotePreview[] = [];
+  const coolingDown: NotePreview[] = [];
 
   for (const preview of candidates) {
     const viewedAt = lastViewedAt.get(preview.path);
     if (viewedAt !== undefined && now - viewedAt < COOLDOWN_MS) {
+      coolingDown.push(preview);
       continue;
     }
 
@@ -31,6 +33,12 @@ export function selectBatch(
     } else {
       fresh.push(preview);
     }
+  }
+
+  // A small or heavily filtered vault can put every note in cooldown. In that
+  // case, repeat notes instead of returning an empty feed.
+  if (recentWeek.length === 0 && fresh.length === 0) {
+    recentWeek.push(...coolingDown);
   }
 
   // Calculate how many recent we can include (20% of batch)

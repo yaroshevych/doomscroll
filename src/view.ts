@@ -68,7 +68,7 @@ export class DoomscrollView extends ItemView {
     reshuffleBtn.setAttribute('aria-label', 'Reshuffle');
     setIcon(reshuffleBtn, 'refresh-cw');
     reshuffleBtn.addEventListener('click', () => {
-      this.showNewBatch();
+      void this.showNewBatch();
     });
 
     // Previous batch button
@@ -94,30 +94,45 @@ export class DoomscrollView extends ItemView {
     const bodyContainer = this.containerEl.createDiv('doomscroll-body');
     bodyContainer.className = 'doomscroll-body';
 
-    // Check if need to index
-    if (Object.keys(this.plugin.data.previews).length === 0) {
-      const loadingEl = bodyContainer.createDiv('doomscroll-loading');
+    // The first run must build an index before there is anything to display.
+    // Existing indexes are refreshed only after an explicit reshuffle.
+    const needsInitialIndex = Object.keys(this.plugin.data.previews).length === 0;
+    const loadingEl = needsInitialIndex
+      ? bodyContainer.createDiv('doomscroll-loading')
+      : null;
+    if (loadingEl) {
       loadingEl.textContent = 'Indexing your vault…';
+    }
 
+    if (needsInitialIndex) {
       try {
-        await this.plugin.indexer.buildOrUpdateIndex((done, total) => {
-          loadingEl.textContent = `Indexed ${done}/${total}`;
-        });
+        await this.plugin.indexer.refreshIfStale(
+          (done, total) => {
+            if (loadingEl) {
+              loadingEl.textContent = `Indexed ${done}/${total}`;
+            }
+          },
+          true
+        );
         await this.plugin.saveSettings();
       } catch (error) {
         console.error('Error indexing vault:', error);
-        loadingEl.textContent = 'Error indexing vault';
+        if (loadingEl) {
+          loadingEl.textContent = 'Error indexing vault';
+        }
       }
-
-      loadingEl.remove();
     }
+    loadingEl?.remove();
 
     // Render batch
     this.hasRendered = true;
     this.renderBatchIntoContainer(bodyContainer);
   }
 
-  private renderBatchIntoContainer(container: HTMLElement): void {
+  private renderBatchIntoContainer(
+    container: HTMLElement,
+    previousOrder?: readonly string[]
+  ): void {
     // Get fresh batch if not already loaded
     if (this.currentBatch.length === 0) {
       const candidates = Object.entries(this.plugin.data.previews).map(
@@ -129,6 +144,16 @@ export class DoomscrollView extends ItemView {
         this.plugin.data.settings.batchSize,
         Date.now()
       );
+      if (
+        previousOrder &&
+        this.currentBatch.length > 1 &&
+        hasSameOrder(this.currentBatch, previousOrder)
+      ) {
+        [this.currentBatch[0], this.currentBatch[1]] = [
+          this.currentBatch[1]!,
+          this.currentBatch[0]!,
+        ];
+      }
       this.batchHistory.unshift(this.currentBatch);
       this.batchHistoryCursor = 0;
     }
@@ -184,14 +209,32 @@ export class DoomscrollView extends ItemView {
     reshuffleBtn.className = 'doomscroll-reshuffle-end-btn';
     reshuffleBtn.textContent = 'Reshuffle';
     reshuffleBtn.addEventListener('click', () => {
-      this.showNewBatch();
+      void this.showNewBatch();
     });
   }
 
   private showNewBatch(): void {
+    const previousOrder = this.currentBatch.map((preview) => preview.path);
     this.currentBatch = [];
-    this.renderBatch();
+    this.renderBatch(previousOrder);
     this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
+
+    // Let the cached reshuffle paint first. Vault enumeration still runs on
+    // the UI thread because Obsidian's API is unavailable inside Web Workers.
+    window.setTimeout(() => {
+      void this.refreshIndexInBackground();
+    }, 0);
+  }
+
+  private async refreshIndexInBackground(): Promise<void> {
+    try {
+      const refreshed = await this.plugin.indexer.refreshIfStale();
+      if (refreshed) {
+        await this.plugin.saveSettings();
+      }
+    } catch (error) {
+      console.error('Error refreshing vault index:', error);
+    }
   }
 
   private showPreviousBatch(): void {
@@ -213,10 +256,10 @@ export class DoomscrollView extends ItemView {
     }
   }
 
-  private renderBatch(): void {
+  private renderBatch(previousOrder?: readonly string[]): void {
     const body = this.containerEl.querySelector('.doomscroll-body');
     if (body) {
-      this.renderBatchIntoContainer(body as HTMLElement);
+      this.renderBatchIntoContainer(body as HTMLElement, previousOrder);
     }
   }
 
@@ -342,4 +385,14 @@ export class DoomscrollView extends ItemView {
     }
     return Promise.resolve();
   }
+}
+
+function hasSameOrder(
+  batch: readonly NotePreview[],
+  paths: readonly string[]
+): boolean {
+  return (
+    batch.length === paths.length &&
+    batch.every((preview, index) => preview.path === paths[index])
+  );
 }

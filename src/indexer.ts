@@ -3,13 +3,44 @@ import { PluginData, StoredNotePreview } from './types';
 import { extractImage, extractSnippet } from './extract';
 import { globMatch } from './glob';
 
+const INDEX_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 export class Indexer {
   app: App;
   data: PluginData;
+  private lastRefreshStartedAt = 0;
+  private refreshPromise: Promise<void> | null = null;
 
   constructor(app: App, data: PluginData) {
     this.app = app;
     this.data = data;
+  }
+
+  async refreshIfStale(
+    onProgress?: (done: number, total: number) => void,
+    force = false
+  ): Promise<boolean> {
+    if (this.refreshPromise) {
+      await this.refreshPromise;
+      return false;
+    }
+
+    if (
+      !force &&
+      Date.now() - this.lastRefreshStartedAt < INDEX_REFRESH_INTERVAL_MS
+    ) {
+      return false;
+    }
+
+    this.lastRefreshStartedAt = Date.now();
+    this.refreshPromise = this.buildOrUpdateIndex(onProgress);
+
+    try {
+      await this.refreshPromise;
+      return true;
+    } finally {
+      this.refreshPromise = null;
+    }
   }
 
   getCandidateFiles(): TFile[] {
