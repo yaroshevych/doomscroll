@@ -141,6 +141,14 @@
   color: var(--text-muted);
 }
 
+.doomscroll-settings-header {
+  padding-top: 1rem;
+}
+
+.doomscroll-settings-header .setting-item-control {
+  margin-top: 1rem;
+}
+
 .doomscroll-reshuffle-section {
   text-align: center;
   padding: 2rem 0 1rem 0;

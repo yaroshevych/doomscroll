@@ -3,6 +3,9 @@ import type { SettingDefinitionItem } from 'obsidian';
 import DoomscrollPlugin from './main';
 import { PluginSettings } from './types';
 
+const GITHUB_URL = 'https://github.com/yaroshevych/doomscroll';
+const ISSUES_URL = `${GITHUB_URL}/issues`;
+
 export const DEFAULT_SETTINGS: PluginSettings = {
   batchSize: 20,
   excludeFolders: [],
@@ -21,6 +24,13 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
   getSettingDefinitions(): SettingDefinitionItem[] {
     return [
+      {
+        name: 'Doomscroll settings',
+        searchable: false,
+        render: (setting) => {
+          configureHeader(setting);
+        },
+      },
       {
         name: 'Batch size',
         desc: 'Number of cards to show per reshuffle',
@@ -96,6 +106,8 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
+    configureHeader(new Setting(containerEl));
+
     new Setting(containerEl)
       .setName('Batch size')
       .setDesc('Number of cards to show per reshuffle')
@@ -159,6 +171,23 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           })
       );
   }
+}
+
+function configureHeader(setting: Setting): void {
+  setting
+    .setClass('doomscroll-settings-header')
+    .setName('Doomscroll settings')
+    .setHeading()
+    .addButton((button) =>
+      button.setButtonText('GitHub').onClick(() => {
+        window.open(GITHUB_URL, '_blank');
+      })
+    )
+    .addButton((button) =>
+      button.setButtonText('Report issue').onClick(() => {
+        window.open(ISSUES_URL, '_blank');
+      })
+    );
 }
 
 function parseLines(value: string): string[] {
