@@ -14,14 +14,18 @@ export class Indexer {
 
   getCandidateFiles(): TFile[] {
     const candidates: TFile[] = [];
-
     const allFiles = this.app.vault.getMarkdownFiles();
+    const excludeFolders = this.data.settings.excludeFolders;
+    const excludeGlobs = this.data.settings.excludeGlobs;
+    const excludeTags = new Set(
+      this.data.settings.excludeTags.map((tag) => tag.toLowerCase())
+    );
 
     for (const file of allFiles) {
       // Filter out files whose path starts with any excludeFolders
       let excluded = false;
 
-      for (const folderPath of this.data.settings.excludeFolders) {
+      for (const folderPath of excludeFolders) {
         if (file.path.startsWith(folderPath)) {
           excluded = true;
           break;
@@ -33,7 +37,7 @@ export class Indexer {
       }
 
       // Filter out files matching any excludeGlobs
-      for (const glob of this.data.settings.excludeGlobs) {
+      for (const glob of excludeGlobs) {
         if (globMatch(glob, file.path)) {
           excluded = true;
           break;
@@ -41,6 +45,11 @@ export class Indexer {
       }
 
       if (excluded) {
+        continue;
+      }
+
+      if (excludeTags.size === 0) {
+        candidates.push(file);
         continue;
       }
 
@@ -74,8 +83,8 @@ export class Indexer {
       }
 
       let hasExcludedTag = false;
-      for (const excludeTag of this.data.settings.excludeTags) {
-        if (fileTags.has(excludeTag.toLowerCase())) {
+      for (const excludeTag of excludeTags) {
+        if (fileTags.has(excludeTag)) {
           hasExcludedTag = true;
           break;
         }
@@ -97,42 +106,44 @@ export class Indexer {
     const candidates = this.getCandidateFiles();
     const total = candidates.length;
 
-    // Process in chunks of 20
-    const chunkSize = 20;
+    // Keep reads parallel but bounded for mobile devices and large notes.
+    const chunkSize = 8;
 
     for (let i = 0; i < candidates.length; i += chunkSize) {
       const chunk = candidates.slice(i, i + chunkSize);
 
-      for (const file of chunk) {
-        // Check if cached preview is still valid
-        if (this.data.previews[file.path]?.mtime === file.stat.mtime) {
-          // Reuse cached preview
-          continue;
-        }
+      await Promise.all(
+        chunk.map(async (file) => {
+          // Check if cached preview is still valid
+          if (this.data.previews[file.path]?.mtime === file.stat.mtime) {
+            // Reuse cached preview
+            return;
+          }
 
-        // Build new preview
-        const content = await this.app.vault.cachedRead(file);
-        const fileCache = this.app.metadataCache.getFileCache(file);
-        const frontmatter = fileCache?.frontmatter;
+          // Build new preview
+          const content = await this.app.vault.cachedRead(file);
+          const fileCache = this.app.metadataCache.getFileCache(file);
+          const frontmatter = fileCache?.frontmatter;
 
-        const imagePath = extractImage(
-          content,
-          frontmatter,
-          this.data.settings.frontmatterImageProps
-        );
-        const snippet = extractSnippet(content);
+          const imagePath = extractImage(
+            content,
+            frontmatter,
+            this.data.settings.frontmatterImageProps
+          );
+          const snippet = extractSnippet(content);
 
-        const preview: StoredNotePreview = {
-          mtime: file.stat.mtime,
-          ...(imagePath ? { imagePath } : {}),
-          snippet: snippet,
-        };
+          const preview: StoredNotePreview = {
+            mtime: file.stat.mtime,
+            ...(imagePath ? { imagePath } : {}),
+            snippet: snippet,
+          };
 
-        this.data.previews[file.path] = preview;
-      }
+          this.data.previews[file.path] = preview;
+        })
+      );
 
       // Yield to UI
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
 
       if (onProgress) {
         onProgress(Math.min(i + chunkSize, total), total);
