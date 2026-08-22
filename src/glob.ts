@@ -1,4 +1,4 @@
-export function globMatch(pattern: string, filePath: string): boolean {
+export function compileGlob(pattern: string): RegExp {
   // Convert glob pattern to regex
   // * matches any chars except /
   // ** matches any chars including /
@@ -56,8 +56,11 @@ export function globMatch(pattern: string, filePath: string): boolean {
     }
   }
 
-  const re = new RegExp(`^${regex}$`);
-  return re.test(filePath);
+  return new RegExp(`^${regex}$`);
+}
+
+export function globMatch(pattern: string, filePath: string): boolean {
+  return compileGlob(pattern).test(filePath);
 }
 
 function escapeRegex(char: string): string {

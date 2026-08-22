@@ -1,7 +1,7 @@
 import { App, TFile } from 'obsidian';
 import { PluginData, StoredNotePreview } from './types';
 import { extractImage, extractSnippet } from './extract';
-import { globMatch } from './glob';
+import { compileGlob } from './glob';
 
 const INDEX_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -46,18 +46,23 @@ export class Indexer {
   getCandidateFiles(): TFile[] {
     const candidates: TFile[] = [];
     const allFiles = this.app.vault.getMarkdownFiles();
-    const excludeFolders = this.data.settings.excludeFolders;
-    const excludeGlobs = this.data.settings.excludeGlobs;
+    const excludeFolders = this.data.settings.excludeFolders
+      .map((folderPath) => folderPath.replace(/\/+$/, ''))
+      .filter((folderPath) => folderPath.length > 0);
+    const excludeGlobs = this.data.settings.excludeGlobs.map(compileGlob);
     const excludeTags = new Set(
       this.data.settings.excludeTags.map((tag) => tag.toLowerCase())
     );
 
     for (const file of allFiles) {
-      // Filter out files whose path starts with any excludeFolders
+      // Filter out files inside any excluded folder.
       let excluded = false;
 
       for (const folderPath of excludeFolders) {
-        if (file.path.startsWith(folderPath)) {
+        if (
+          file.path === folderPath ||
+          file.path.startsWith(`${folderPath}/`)
+        ) {
           excluded = true;
           break;
         }
@@ -69,7 +74,7 @@ export class Indexer {
 
       // Filter out files matching any excludeGlobs
       for (const glob of excludeGlobs) {
-        if (globMatch(glob, file.path)) {
+        if (glob.test(file.path)) {
           excluded = true;
           break;
         }

@@ -5,6 +5,8 @@ import { selectBatch } from './selector';
 import { recordView } from './history';
 
 export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view';
+const HISTORY_SAVE_DELAY_MS = 2_000;
+const MAX_BATCH_HISTORY = 20;
 
 interface AppWithSettings {
   setting: {
@@ -24,6 +26,8 @@ export class DoomscrollView extends ItemView {
   batchHistory: NotePreview[][] = [];
   batchHistoryCursor: number = -1;
   backButton: HTMLButtonElement | null = null;
+  private historySaveTimer: number | null = null;
+  private historySavePending = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
     super(leaf);
@@ -53,14 +57,12 @@ export class DoomscrollView extends ItemView {
 
     // Header row
     const header = this.containerEl.createDiv('doomscroll-header');
-    header.className = 'doomscroll-header';
 
     const title = header.createEl('h2');
     title.textContent = 'Doomscroll';
     title.className = 'doomscroll-title';
 
     const controls = header.createDiv('doomscroll-controls');
-    controls.className = 'doomscroll-controls';
 
     // Reshuffle button (refresh icon)
     const reshuffleBtn = controls.createEl('button');
@@ -92,7 +94,6 @@ export class DoomscrollView extends ItemView {
 
     // Body - scrollable container
     const bodyContainer = this.containerEl.createDiv('doomscroll-body');
-    bodyContainer.className = 'doomscroll-body';
 
     // The first run must build an index before there is anything to display.
     // Existing indexes are refreshed only after an explicit reshuffle.
@@ -155,6 +156,10 @@ export class DoomscrollView extends ItemView {
         ];
       }
       this.batchHistory.unshift(this.currentBatch);
+      this.batchHistory.length = Math.min(
+        this.batchHistory.length,
+        MAX_BATCH_HISTORY
+      );
       this.batchHistoryCursor = 0;
     }
 
@@ -186,7 +191,7 @@ export class DoomscrollView extends ItemView {
         }
 
         if (historyChanged) {
-          void this.plugin.saveSettings();
+          this.scheduleHistorySave();
         }
       },
       { root: container, threshold: 0.1 }
@@ -322,7 +327,7 @@ export class DoomscrollView extends ItemView {
           preview.path,
           Date.now()
         );
-        await this.plugin.saveSettings();
+        this.scheduleHistorySave();
       }
 
       // Open in new leaf
@@ -374,7 +379,24 @@ export class DoomscrollView extends ItemView {
     this.imageObserver.observe(img);
   }
 
-  onClose(): Promise<void> {
+  private scheduleHistorySave(): void {
+    this.historySavePending = true;
+    if (this.historySaveTimer !== null) {
+      window.clearTimeout(this.historySaveTimer);
+    }
+    this.historySaveTimer = window.setTimeout(() => {
+      this.historySaveTimer = null;
+      void this.flushHistorySave();
+    }, HISTORY_SAVE_DELAY_MS);
+  }
+
+  private async flushHistorySave(): Promise<void> {
+    if (!this.historySavePending) return;
+    this.historySavePending = false;
+    await this.plugin.saveSettings();
+  }
+
+  async onClose(): Promise<void> {
     if (this.cardObserver) {
       this.cardObserver.disconnect();
       this.cardObserver = null;
@@ -383,7 +405,11 @@ export class DoomscrollView extends ItemView {
       this.imageObserver.disconnect();
       this.imageObserver = null;
     }
-    return Promise.resolve();
+    if (this.historySaveTimer !== null) {
+      window.clearTimeout(this.historySaveTimer);
+      this.historySaveTimer = null;
+    }
+    await this.flushHistorySave();
   }
 }
 
