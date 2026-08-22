@@ -1,7 +1,7 @@
 {
-  "name": "pkm-feed",
+  "name": "doomscroll",
   "version": "0.1.0",
-  "description": "Randomized card feed for rediscovering old notes",
+  "description": "Rediscover your notes in a randomized, scrollable feed.",
   "main": "main.js",
   "type": "module",
   "scripts": {

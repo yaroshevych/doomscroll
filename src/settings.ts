@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import ObsidianScrollPlugin from './main';
+import DoomscrollPlugin from './main';
 import { PluginSettings } from './types';
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -10,10 +10,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   frontmatterImageProps: ['cover', 'image', 'banner'],
 };
 
-export class ObsidianScrollSettingTab extends PluginSettingTab {
-  plugin: ObsidianScrollPlugin;
+export class DoomscrollSettingTab extends PluginSettingTab {
+  plugin: DoomscrollPlugin;
 
-  constructor(app: App, plugin: ObsidianScrollPlugin) {
+  constructor(app: App, plugin: DoomscrollPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }

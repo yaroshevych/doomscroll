@@ -1,13 +1,13 @@
 import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
-import ObsidianScrollPlugin from './main';
+import DoomscrollPlugin from './main';
 import { NotePreview, toNotePreview } from './types';
 import { selectBatch } from './selector';
 import { recordView } from './history';
 
-export const VIEW_TYPE_SCROLL = 'obsidian-scroll-view';
+export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view';
 
-export class ScrollView extends ItemView {
-  plugin: ObsidianScrollPlugin;
+export class DoomscrollView extends ItemView {
+  plugin: DoomscrollPlugin;
   containerEl: HTMLElement;
   hasRendered: boolean = false;
   currentBatch: NotePreview[] = [];
@@ -18,18 +18,18 @@ export class ScrollView extends ItemView {
   batchHistoryCursor: number = -1;
   backButton: HTMLButtonElement | null = null;
 
-  constructor(leaf: WorkspaceLeaf, plugin: ObsidianScrollPlugin) {
+  constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
     super(leaf);
     this.plugin = plugin;
     this.containerEl = this.contentEl;
   }
 
   getViewType(): string {
-    return VIEW_TYPE_SCROLL;
+    return VIEW_TYPE_DOOMSCROLL;
   }
 
   getDisplayText(): string {
-    return 'PKM Feed';
+    return 'Doomscroll';
   }
 
   getIcon(): string {
@@ -42,22 +42,22 @@ export class ScrollView extends ItemView {
 
   private async render(): Promise<void> {
     this.containerEl.empty();
-    this.containerEl.addClass('scroll-view-container');
+    this.containerEl.addClass('doomscroll-view-container');
 
     // Header row
-    const header = this.containerEl.createDiv('scroll-header');
-    header.className = 'scroll-header';
+    const header = this.containerEl.createDiv('doomscroll-header');
+    header.className = 'doomscroll-header';
 
     const title = header.createEl('h2');
-    title.textContent = 'PKM Feed';
-    title.className = 'scroll-title';
+    title.textContent = 'Doomscroll';
+    title.className = 'doomscroll-title';
 
-    const controls = header.createDiv('scroll-controls');
-    controls.className = 'scroll-controls';
+    const controls = header.createDiv('doomscroll-controls');
+    controls.className = 'doomscroll-controls';
 
     // Reshuffle button (refresh icon)
     const reshuffleBtn = controls.createEl('button');
-    reshuffleBtn.className = 'scroll-reshuffle-btn';
+    reshuffleBtn.className = 'doomscroll-reshuffle-btn';
     reshuffleBtn.setAttribute('aria-label', 'Reshuffle');
     setIcon(reshuffleBtn, 'refresh-cw');
     reshuffleBtn.addEventListener('click', () => {
@@ -66,7 +66,7 @@ export class ScrollView extends ItemView {
 
     // Previous batch button
     this.backButton = controls.createEl('button');
-    this.backButton.className = 'scroll-back-btn';
+    this.backButton.className = 'doomscroll-back-btn';
     this.backButton.setAttribute('aria-label', 'Previous card set');
     setIcon(this.backButton, 'arrow-left');
     this.backButton.addEventListener('click', () => this.showPreviousBatch());
@@ -74,21 +74,21 @@ export class ScrollView extends ItemView {
 
     // Settings button
     const settingsBtn = controls.createEl('button');
-    settingsBtn.className = 'scroll-settings-btn';
+    settingsBtn.className = 'doomscroll-settings-btn';
     settingsBtn.setAttribute('aria-label', 'Settings');
     setIcon(settingsBtn, 'settings');
     settingsBtn.addEventListener('click', () => {
       (this.plugin.app as any).setting.open();
-      (this.plugin.app as any).setting.openTabById('pkm-feed');
+      (this.plugin.app as any).setting.openTabById('doomscroll');
     });
 
     // Body - scrollable container
-    const bodyContainer = this.containerEl.createDiv('scroll-body');
-    bodyContainer.className = 'scroll-body';
+    const bodyContainer = this.containerEl.createDiv('doomscroll-body');
+    bodyContainer.className = 'doomscroll-body';
 
     // Check if need to index
     if (Object.keys(this.plugin.data.previews).length === 0) {
-      const loadingEl = bodyContainer.createDiv('scroll-loading');
+      const loadingEl = bodyContainer.createDiv('doomscroll-loading');
       loadingEl.textContent = 'Indexing your vault…';
 
       try {
@@ -170,9 +170,11 @@ export class ScrollView extends ItemView {
     }
 
     // Reshuffle button at end
-    const reshuffleSection = container.createDiv('scroll-reshuffle-section');
+    const reshuffleSection = container.createDiv(
+      'doomscroll-reshuffle-section'
+    );
     const reshuffleBtn = reshuffleSection.createEl('button');
-    reshuffleBtn.className = 'scroll-reshuffle-end-btn';
+    reshuffleBtn.className = 'doomscroll-reshuffle-end-btn';
     reshuffleBtn.textContent = 'Reshuffle';
     reshuffleBtn.addEventListener('click', () => {
       this.showNewBatch();
@@ -182,7 +184,7 @@ export class ScrollView extends ItemView {
   private showNewBatch(): void {
     this.currentBatch = [];
     this.renderBatch();
-    this.containerEl.querySelector('.scroll-body')?.scrollTo({ top: 0 });
+    this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
   }
 
   private showPreviousBatch(): void {
@@ -193,7 +195,7 @@ export class ScrollView extends ItemView {
     this.batchHistoryCursor = previousCursor;
     this.currentBatch = previousBatch;
     this.renderBatch();
-    this.containerEl.querySelector('.scroll-body')?.scrollTo({ top: 0 });
+    this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
   }
 
   private updateBackButton(): void {
@@ -205,7 +207,7 @@ export class ScrollView extends ItemView {
   }
 
   private renderBatch(): void {
-    const body = this.containerEl.querySelector('.scroll-body');
+    const body = this.containerEl.querySelector('.doomscroll-body');
     if (body) {
       this.renderBatchIntoContainer(body as HTMLElement);
     }
@@ -213,29 +215,29 @@ export class ScrollView extends ItemView {
 
   private renderCard(preview: NotePreview): HTMLElement {
     const card = document.createElement('div');
-    card.className = 'scroll-card';
+    card.className = 'doomscroll-card';
     card.dataset.path = preview.path;
 
     // Title + date row
     const titleRow = card.createEl('div');
-    titleRow.className = 'scroll-card-titlerow';
+    titleRow.className = 'doomscroll-card-titlerow';
 
     const titleEl = titleRow.createEl('h3');
-    titleEl.className = 'scroll-card-title';
+    titleEl.className = 'doomscroll-card-title';
     titleEl.textContent = preview.title;
 
     const dateEl = titleRow.createEl('div');
-    dateEl.className = 'scroll-card-date';
+    dateEl.className = 'doomscroll-card-date';
     const date = new Date(preview.mtime);
     dateEl.textContent = date.toLocaleDateString();
 
     // Image (lazy loaded)
     if (preview.imagePath) {
       const imageContainer = card.createEl('div');
-      imageContainer.className = 'scroll-card-image-container';
+      imageContainer.className = 'doomscroll-card-image-container';
 
       const img = imageContainer.createEl('img');
-      img.className = 'scroll-card-image';
+      img.className = 'doomscroll-card-image';
       img.dataset.src = preview.imagePath;
       img.alt = preview.title;
 
@@ -245,7 +247,7 @@ export class ScrollView extends ItemView {
 
     // Snippet
     const snippetEl = card.createEl('p');
-    snippetEl.className = 'scroll-card-snippet';
+    snippetEl.className = 'doomscroll-card-snippet';
     snippetEl.textContent = preview.snippet;
     snippetEl.style.whiteSpace = 'pre-line';
 
@@ -301,7 +303,7 @@ export class ScrollView extends ItemView {
                   imgEl.src = resolvedSrc;
                 } else {
                   // Couldn't resolve — hide the container instead of showing a broken icon
-                  imgEl.closest('.scroll-card-image-container')?.remove();
+                imgEl.closest('.doomscroll-card-image-container')?.remove();
                 }
               }
 

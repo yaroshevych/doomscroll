@@ -1,36 +1,54 @@
-# PKM Feed
+# Doomscroll
 
-**Doom-scroll your own notes.** A randomized card feed that resurfaces what you already wrote — before some feed algorithm resurfaces someone else's.
+**Doomscroll your own thoughts.**
+
+I used to be an engineering manager on Instagram Reels. Now I am using the same
+feed format to scroll through my own notes.
+
+No ranking algorithm, no cloud service, no celebrities. Just notes, web
+snippets, book quotes, and other things already sitting in my Obsidian vault.
 
 ## Why
 
-Your vault is already a curated, ranked feed: every note passed your own bar for "worth writing down." That's higher signal than anything a recommendation engine infers from clicks. It's just buried, sorted by folder, and never opened again.
+My problem was simple: I write a lot, save a lot, but rarely come back to any of
+it. Jotted notes, diary entries, LLM Wiki pages - all had the same problem. The
+content was great. I just didn't feel like going back to it.
 
-Social apps nailed the *consumption* layer — scroll-based UX, bite-sized cards, mobile-first, serendipity over chronology. PKM Feed steals that layer and points it at your own vault. Same scroll, your content.
+My vault became write-only.
 
-<img src="https://github.com/user-attachments/assets/ea19fad7-01bf-497f-bf1a-3fd3fb48f5de" height="400px" alt="PKM Feed Mobile" />
+Social apps are very good at resurfacing content. Personal knowledge management
+tools are not. Doomscroll borrows the science behind the social feed and applies
+it to your vault, so you are motivated to engage with your notes.
+
+Same scroll. Your content.
+
+<img src="https://github.com/user-attachments/assets/ea19fad7-01bf-497f-bf1a-3fd3fb48f5de" height="400px" alt="Doomscroll on mobile" />
 
 ## Features
 
-- **Random card feed** — notes surface in shuffled order, not last-modified
-- **Smart selection** — recent notes get a 20% boost; the rest of each batch is old gold
-- **Configurable filters** — exclude folders, tags, filename patterns
-- **Image extraction** — pulls cover images from frontmatter, markdown, or HTML
-- **Clean previews** — prose-only snippets, no headings or code noise
-- **Cooldown protection** — a note won't repeat for 30 minutes
-- **Lazy image loading** — images load as they scroll into view
-- **Session memory** — your scroll position survives switching panes
+- Shuffled card feed, not another list sorted by modification date
+- Manual reshuffle when the current batch is not doing it for you
+- At most 20% of each batch is reserved for notes seen in the last seven days,
+  unless there are not enough unseen notes
+- 30-minute cooldown before a note can appear again
+- Back button for the batch you should not have reshuffled
+- Filters for folders, tags, and filename patterns
+- Cover images from frontmatter, Markdown, or HTML
+- Prose previews without headings and code noise
+- Lazy image loading
+- Works on desktop and mobile
+- Scroll position survives switching panes
 
 ## Installation
 
 1. Clone this repository into your vault's `.obsidian/plugins/` directory:
    ```
-   git clone https://github.com/yaroshevych/pkm-feed .obsidian/plugins/pkm-feed
+   git clone https://github.com/yaroshevych/doomscroll .obsidian/plugins/doomscroll
    ```
 
 2. Navigate to the plugin directory and install dependencies:
    ```
-   cd .obsidian/plugins/pkm-feed
+   cd .obsidian/plugins/doomscroll
    npm install
    ```
 
@@ -43,7 +61,7 @@ Social apps nailed the *consumption* layer — scroll-based UX, bite-sized cards
 
 ## Settings
 
-- **Batch size** (5–50): How many cards to show per reshuffle (default: 20)
+- **Batch size** (5 to 50): How many cards to show per reshuffle (default: 20)
 - **Exclude folders**: Folder paths to skip (one per line)
 - **Exclude tags**: Tag names to skip without # (one per line)
 - **Exclude filename globs**: Glob patterns to skip (one per line, e.g., `_*` for drafts)
@@ -51,10 +69,11 @@ Social apps nailed the *consumption* layer — scroll-based UX, bite-sized cards
 
 ## Usage
 
-1. Click the gallery icon in the ribbon or use the "Open Scroll" command to open the feed
+1. Click the gallery icon in the ribbon or use the "Open feed" command
 2. Click any card to open the note in a new pane
-3. Click the refresh icon to reshuffle and get a new random batch
-4. Adjust settings to tune which notes appear
+3. Click the refresh icon when you want a new random batch
+4. Click the back arrow to return to the previous batch
+5. Adjust settings to tune which notes appear
 
 ## Development
 

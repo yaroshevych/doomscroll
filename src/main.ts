@@ -1,10 +1,10 @@
 import { Plugin } from 'obsidian';
 import { PluginData } from './types';
-import { DEFAULT_SETTINGS, ObsidianScrollSettingTab } from './settings';
+import { DEFAULT_SETTINGS, DoomscrollSettingTab } from './settings';
 import { Indexer } from './indexer';
-import { ScrollView, VIEW_TYPE_SCROLL } from './view';
+import { DoomscrollView, VIEW_TYPE_DOOMSCROLL } from './view';
 
-export default class ObsidianScrollPlugin extends Plugin {
+export default class DoomscrollPlugin extends Plugin {
   data!: PluginData;
   indexer!: Indexer;
 
@@ -47,29 +47,34 @@ export default class ObsidianScrollPlugin extends Plugin {
     this.indexer = new Indexer(this.app, this.data);
 
     // Register view
-    this.registerView(VIEW_TYPE_SCROLL, (leaf) => new ScrollView(leaf, this));
+    this.registerView(
+      VIEW_TYPE_DOOMSCROLL,
+      (leaf) => new DoomscrollView(leaf, this)
+    );
 
     // Ribbon icon
-    this.addRibbonIcon('gallery-vertical', 'Open PKM Feed', () => {
-      this.activateView();
+    this.addRibbonIcon('gallery-vertical', 'Open feed', () => {
+      void this.activateView();
     });
 
-    // Command to open scroll view
+    // Command to open Doomscroll
     this.addCommand({
-      id: 'open-scroll-view',
+      id: 'open-feed',
       name: 'Open feed',
       callback: () => {
-        this.activateView();
+        void this.activateView();
       },
     });
 
     // Settings tab
-    this.addSettingTab(new ObsidianScrollSettingTab(this.app, this));
+    this.addSettingTab(new DoomscrollSettingTab(this.app, this));
   }
 
   async activateView(): Promise<void> {
     // Try to reuse existing leaf
-    const existingLeaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_SCROLL)[0];
+    const existingLeaf = this.app.workspace.getLeavesOfType(
+      VIEW_TYPE_DOOMSCROLL
+    )[0];
 
     if (existingLeaf) {
       this.app.workspace.revealLeaf(existingLeaf);
@@ -79,7 +84,7 @@ export default class ObsidianScrollPlugin extends Plugin {
     // Create new leaf in main workspace
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.setViewState({
-      type: VIEW_TYPE_SCROLL,
+      type: VIEW_TYPE_DOOMSCROLL,
       active: true,
     });
     this.app.workspace.revealLeaf(leaf);
