@@ -1,5 +1,9 @@
+export type OpenNoteBehavior = 'tab' | 'reuse' | 'window';
+
 export interface PluginSettings {
   batchSize: number;
+  includeMediaOnlyNotes: boolean;
+  openNoteBehavior: OpenNoteBehavior;
   excludeFolders: string[];
   excludeTags: string[];
   excludeGlobs: string[];
@@ -14,6 +18,7 @@ export interface StoredNotePreview {
   // Omitted entirely (not `null`) when the note has no image — most notes
   // don't, and skipping the key avoids paying for "imagePath":null on each.
   imagePath?: string;
+  mediaOnly?: true;
   snippet: string;
 }
 

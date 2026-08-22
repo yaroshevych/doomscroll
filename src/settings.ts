@@ -8,6 +8,8 @@ const ISSUES_URL = `${GITHUB_URL}/issues`;
 
 export const DEFAULT_SETTINGS: PluginSettings = {
   batchSize: 20,
+  includeMediaOnlyNotes: true,
+  openNoteBehavior: 'tab',
   excludeFolders: [],
   excludeTags: [],
   excludeGlobs: [],
@@ -38,6 +40,24 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           type: 'dropdown',
           key: 'batchSize',
           options: { '10': '10', '20': '20', '50': '50', '100': '100' },
+        },
+      },
+      {
+        name: 'Include media-only notes',
+        desc: 'Show notes that contain only images, PDFs, or other attachments',
+        control: { type: 'toggle', key: 'includeMediaOnlyNotes' },
+      },
+      {
+        name: 'Open notes in',
+        desc: 'Choose where a card opens',
+        control: {
+          type: 'dropdown',
+          key: 'openNoteBehavior',
+          options: {
+            tab: 'New tab',
+            reuse: 'Reuse current tab',
+            window: 'New window',
+          },
         },
       },
       {
@@ -73,6 +93,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     switch (key) {
       case 'batchSize':
         return String(settings.batchSize);
+      case 'includeMediaOnlyNotes':
+        return settings.includeMediaOnlyNotes;
+      case 'openNoteBehavior':
+        return settings.openNoteBehavior;
       case 'excludeFolders':
       case 'excludeTags':
       case 'excludeGlobs':
@@ -84,15 +108,21 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   }
 
   async setControlValue(key: string, value: unknown): Promise<void> {
-    if (typeof value !== 'string') return;
-
-    if (key === 'batchSize') {
+    if (key === 'includeMediaOnlyNotes' && typeof value === 'boolean') {
+      this.plugin.data.settings.includeMediaOnlyNotes = value;
+    } else if (key === 'batchSize' && typeof value === 'string') {
       this.plugin.data.settings.batchSize = Number(value);
     } else if (
-      key === 'excludeFolders' ||
-      key === 'excludeTags' ||
-      key === 'excludeGlobs' ||
-      key === 'frontmatterImageProps'
+      key === 'openNoteBehavior' &&
+      (value === 'tab' || value === 'reuse' || value === 'window')
+    ) {
+      this.plugin.data.settings.openNoteBehavior = value;
+    } else if (
+      typeof value === 'string' &&
+      (key === 'excludeFolders' ||
+        key === 'excludeTags' ||
+        key === 'excludeGlobs' ||
+        key === 'frontmatterImageProps')
     ) {
       this.plugin.data.settings[key] = parseLines(value);
     } else {
@@ -117,6 +147,38 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(String(this.plugin.data.settings.batchSize))
           .onChange(async (value) => {
             this.plugin.data.settings.batchSize = Number(value);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Include media-only notes')
+      .setDesc('Show notes that contain only images, PDFs, or other attachments')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.data.settings.includeMediaOnlyNotes)
+          .onChange(async (value) => {
+            this.plugin.data.settings.includeMediaOnlyNotes = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Open notes in')
+      .setDesc('Choose where a card opens')
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            tab: 'New tab',
+            reuse: 'Reuse current tab',
+            window: 'New window',
+          })
+          .setValue(this.plugin.data.settings.openNoteBehavior)
+          .onChange(async (value) => {
+            if (value !== 'tab' && value !== 'reuse' && value !== 'window') {
+              return;
+            }
+            this.plugin.data.settings.openNoteBehavior = value;
             await this.plugin.saveSettings();
           })
       );

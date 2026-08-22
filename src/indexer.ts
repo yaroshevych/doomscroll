@@ -170,10 +170,14 @@ export class Indexer {
             this.data.settings.frontmatterImageProps
           );
           const snippet = extractSnippet(content);
+          const mediaOnly =
+            (Boolean(imagePath) && snippet === '(no preview text)') ||
+            /^📎 .+ attached$/.test(snippet);
 
           const preview: StoredNotePreview = {
             mtime: file.stat.mtime,
             ...(imagePath ? { imagePath } : {}),
+            ...(mediaOnly ? { mediaOnly: true as const } : {}),
             snippet: snippet,
           };
 

@@ -13,7 +13,7 @@ export default class DoomscrollPlugin extends Plugin {
     const loadedData = (await this.loadData()) as PluginData | null;
 
     this.data = {
-      settings: loadedData?.settings || DEFAULT_SETTINGS,
+      settings: { ...DEFAULT_SETTINGS, ...loadedData?.settings },
       previews: loadedData?.previews || {},
       history: loadedData?.history || [],
     };

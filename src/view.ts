@@ -15,6 +15,13 @@ interface AppWithSettings {
   };
 }
 
+interface DoomscrollViewState {
+  batchPaths: string[];
+  batchHistoryPaths: string[][];
+  batchHistoryCursor: number;
+  scrollTop: number;
+}
+
 export class DoomscrollView extends ItemView {
   plugin: DoomscrollPlugin;
   containerEl: HTMLElement;
@@ -28,6 +35,7 @@ export class DoomscrollView extends ItemView {
   backButton: HTMLButtonElement | null = null;
   private historySaveTimer: number | null = null;
   private historySavePending = false;
+  private restoredScrollTop = 0;
 
   constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
     super(leaf);
@@ -45,6 +53,42 @@ export class DoomscrollView extends ItemView {
 
   getIcon(): string {
     return 'gallery-vertical';
+  }
+
+  getState(): Record<string, unknown> {
+    const body = this.containerEl.querySelector('.doomscroll-body');
+    const scrollTop =
+      body instanceof HTMLElement ? body.scrollTop : this.restoredScrollTop;
+
+    return {
+      batchPaths: this.currentBatch.map((preview) => preview.path),
+      batchHistoryPaths: this.batchHistory.map((batch) =>
+        batch.map((preview) => preview.path)
+      ),
+      batchHistoryCursor: this.batchHistoryCursor,
+      scrollTop,
+    } satisfies DoomscrollViewState;
+  }
+
+  async setState(state: unknown): Promise<void> {
+    const restored = parseViewState(state);
+    if (!restored) return;
+
+    this.currentBatch = this.resolvePreviewPaths(restored.batchPaths);
+    this.batchHistory = restored.batchHistoryPaths
+      .map((paths) => this.resolvePreviewPaths(paths))
+      .filter((batch) => batch.length > 0)
+      .slice(0, MAX_BATCH_HISTORY);
+    this.batchHistoryCursor = Math.min(
+      restored.batchHistoryCursor,
+      this.batchHistory.length - 1
+    );
+    this.restoredScrollTop = restored.scrollTop;
+
+    if (this.hasRendered) {
+      this.renderBatch();
+      this.restoreScrollPosition();
+    }
   }
 
   async onOpen(): Promise<void> {
@@ -94,6 +138,13 @@ export class DoomscrollView extends ItemView {
 
     // Body - scrollable container
     const bodyContainer = this.containerEl.createDiv('doomscroll-body');
+    bodyContainer.addEventListener(
+      'scroll',
+      () => {
+        this.restoredScrollTop = bodyContainer.scrollTop;
+      },
+      { passive: true }
+    );
 
     // The first run must build an index before there is anything to display.
     // Existing indexes are refreshed only after an explicit reshuffle.
@@ -128,6 +179,31 @@ export class DoomscrollView extends ItemView {
     // Render batch
     this.hasRendered = true;
     this.renderBatchIntoContainer(bodyContainer);
+    this.restoreScrollPosition();
+  }
+
+  private resolvePreviewPaths(paths: readonly string[]): NotePreview[] {
+    return paths.flatMap((path) => {
+      const stored = this.plugin.data.previews[path];
+      return stored ? [toNotePreview(path, stored)] : [];
+    });
+  }
+
+  private restoreScrollPosition(): void {
+    const scrollTop = this.restoredScrollTop;
+    const restore = (): void => {
+      const body = this.containerEl.querySelector('.doomscroll-body');
+      if (body instanceof HTMLElement) {
+        body.scrollTop = scrollTop;
+      }
+    };
+
+    restore();
+    window.requestAnimationFrame(() => {
+      restore();
+      window.requestAnimationFrame(restore);
+    });
+    window.setTimeout(restore, 100);
   }
 
   private renderBatchIntoContainer(
@@ -136,9 +212,13 @@ export class DoomscrollView extends ItemView {
   ): void {
     // Get fresh batch if not already loaded
     if (this.currentBatch.length === 0) {
-      const candidates = Object.entries(this.plugin.data.previews).map(
-        ([path, stored]) => toNotePreview(path, stored)
-      );
+      const candidates = Object.entries(this.plugin.data.previews)
+        .map(([path, stored]) => toNotePreview(path, stored))
+        .filter(
+          (preview) =>
+            this.plugin.data.settings.includeMediaOnlyNotes ||
+            !isMediaOnlyPreview(preview)
+        );
       this.currentBatch = selectBatch(
         candidates,
         this.plugin.data.history,
@@ -330,8 +410,12 @@ export class DoomscrollView extends ItemView {
         this.scheduleHistorySave();
       }
 
-      // Open in new leaf
-      await this.plugin.app.workspace.getLeaf(true).openFile(file);
+      const behavior = this.plugin.data.settings.openNoteBehavior;
+      const leaf =
+        behavior === 'reuse'
+          ? this.leaf
+          : this.plugin.app.workspace.getLeaf(behavior);
+      await leaf.openFile(file);
     }
   }
 
@@ -421,4 +505,52 @@ function hasSameOrder(
     batch.length === paths.length &&
     batch.every((preview, index) => preview.path === paths[index])
   );
+}
+
+function isMediaOnlyPreview(preview: NotePreview): boolean {
+  if (preview.mediaOnly) return true;
+
+  // Older cached previews predate the explicit mediaOnly flag.
+  return (
+    (Boolean(preview.imagePath) && preview.snippet === '(no preview text)') ||
+    /^📎 .+ attached$/.test(preview.snippet)
+  );
+}
+
+function parseViewState(state: unknown): DoomscrollViewState | null {
+  if (!isRecord(state)) return null;
+
+  const batchPaths = stringArray(state.batchPaths);
+  const rawHistory = state.batchHistoryPaths;
+  if (!batchPaths || !Array.isArray(rawHistory)) return null;
+
+  const batchHistoryPaths: string[][] = [];
+  for (const paths of rawHistory) {
+    const parsed = stringArray(paths);
+    if (!parsed) return null;
+    batchHistoryPaths.push(parsed);
+  }
+
+  const cursor = state.batchHistoryCursor;
+  const scrollTop = state.scrollTop;
+  return {
+    batchPaths,
+    batchHistoryPaths,
+    batchHistoryCursor:
+      typeof cursor === 'number' && Number.isInteger(cursor) ? cursor : 0,
+    scrollTop:
+      typeof scrollTop === 'number' && Number.isFinite(scrollTop)
+        ? Math.max(0, scrollTop)
+        : 0,
+  };
+}
+
+function stringArray(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+    ? value
+    : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
