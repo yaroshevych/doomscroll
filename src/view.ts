@@ -6,6 +6,13 @@ import { recordView } from './history';
 
 export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view';
 
+interface AppWithSettings {
+  setting: {
+    open(): void;
+    openTabById(id: string): void;
+  };
+}
+
 export class DoomscrollView extends ItemView {
   plugin: DoomscrollPlugin;
   containerEl: HTMLElement;
@@ -37,7 +44,7 @@ export class DoomscrollView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.render();
+    await this.render();
   }
 
   private async render(): Promise<void> {
@@ -78,8 +85,9 @@ export class DoomscrollView extends ItemView {
     settingsBtn.setAttribute('aria-label', 'Settings');
     setIcon(settingsBtn, 'settings');
     settingsBtn.addEventListener('click', () => {
-      (this.plugin.app as any).setting.open();
-      (this.plugin.app as any).setting.openTabById('doomscroll');
+      const { setting } = this.plugin.app as unknown as AppWithSettings;
+      setting.open();
+      setting.openTabById('doomscroll');
     });
 
     // Body - scrollable container
@@ -164,8 +172,7 @@ export class DoomscrollView extends ItemView {
 
     // Render cards
     for (const preview of this.currentBatch) {
-      const card = this.renderCard(preview);
-      container.appendChild(card);
+      const card = this.renderCard(container, preview);
       this.cardObserver.observe(card);
     }
 
@@ -213,71 +220,74 @@ export class DoomscrollView extends ItemView {
     }
   }
 
-  private renderCard(preview: NotePreview): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'doomscroll-card';
+  private renderCard(
+    container: HTMLElement,
+    preview: NotePreview
+  ): HTMLElement {
+    const card = container.createDiv('doomscroll-card');
     card.dataset.path = preview.path;
 
     // Title + date row
-    const titleRow = card.createEl('div');
-    titleRow.className = 'doomscroll-card-titlerow';
+    const titleRow = card.createDiv('doomscroll-card-titlerow');
 
     const titleEl = titleRow.createEl('h3');
     titleEl.className = 'doomscroll-card-title';
     titleEl.textContent = preview.title;
 
-    const dateEl = titleRow.createEl('div');
-    dateEl.className = 'doomscroll-card-date';
+    const dateEl = titleRow.createDiv('doomscroll-card-date');
     const date = new Date(preview.mtime);
     dateEl.textContent = date.toLocaleDateString();
 
     // Image (lazy loaded)
     if (preview.imagePath) {
-      const imageContainer = card.createEl('div');
-      imageContainer.className = 'doomscroll-card-image-container';
+      const imageContainer = card.createDiv(
+        'doomscroll-card-image-container'
+      );
 
       const img = imageContainer.createEl('img');
       img.className = 'doomscroll-card-image';
       img.dataset.src = preview.imagePath;
+      img.dataset.notePath = preview.path;
       img.alt = preview.title;
 
       // Setup lazy loading via IntersectionObserver
-      this.setupImageLazyLoad(img, preview);
+      this.setupImageLazyLoad(img);
     }
 
     // Snippet
     const snippetEl = card.createEl('p');
     snippetEl.className = 'doomscroll-card-snippet';
     snippetEl.textContent = preview.snippet;
-    snippetEl.style.whiteSpace = 'pre-line';
 
     // Click handler
-    card.addEventListener('click', async () => {
-      const file = this.plugin.app.vault.getAbstractFileByPath(
-        preview.path
-      ) as TFile;
-
-      if (file) {
-        // A very quick tap can happen before IntersectionObserver fires.
-        if (!this.viewedPathsInBatch.has(preview.path)) {
-          this.viewedPathsInBatch.add(preview.path);
-          this.plugin.data.history = recordView(
-            this.plugin.data.history,
-            preview.path,
-            Date.now()
-          );
-          await this.plugin.saveSettings();
-        }
-
-        // Open in new leaf
-        this.plugin.app.workspace.getLeaf(true).openFile(file);
-      }
+    card.addEventListener('click', () => {
+      void this.openPreview(preview);
     });
 
     return card;
   }
 
-  private setupImageLazyLoad(img: HTMLImageElement, preview: NotePreview): void {
+  private async openPreview(preview: NotePreview): Promise<void> {
+    const file = this.plugin.app.vault.getAbstractFileByPath(preview.path);
+
+    if (file instanceof TFile) {
+      // A very quick tap can happen before IntersectionObserver fires.
+      if (!this.viewedPathsInBatch.has(preview.path)) {
+        this.viewedPathsInBatch.add(preview.path);
+        this.plugin.data.history = recordView(
+          this.plugin.data.history,
+          preview.path,
+          Date.now()
+        );
+        await this.plugin.saveSettings();
+      }
+
+      // Open in new leaf
+      await this.plugin.app.workspace.getLeaf(true).openFile(file);
+    }
+  }
+
+  private setupImageLazyLoad(img: HTMLImageElement): void {
     if (!this.imageObserver) {
       this.imageObserver = new IntersectionObserver(
         (entries) => {
@@ -285,14 +295,15 @@ export class DoomscrollView extends ItemView {
             if (entry.isIntersecting) {
               const imgEl = entry.target as HTMLImageElement;
               const src = imgEl.dataset.src;
+              const notePath = imgEl.dataset.notePath;
 
-              if (src) {
+              if (src && notePath) {
                 const file = this.plugin.app.vault.getAbstractFileByPath(
-                  preview.path
-                ) as TFile;
+                  notePath
+                );
 
                 let resolvedSrc: string | null = null;
-                if (file) {
+                if (file instanceof TFile) {
                   resolvedSrc = this.plugin.indexer.resolveImageSrc(
                     src,
                     file
@@ -303,7 +314,7 @@ export class DoomscrollView extends ItemView {
                   imgEl.src = resolvedSrc;
                 } else {
                   // Couldn't resolve — hide the container instead of showing a broken icon
-                imgEl.closest('.doomscroll-card-image-container')?.remove();
+                  imgEl.closest('.doomscroll-card-image-container')?.remove();
                 }
               }
 

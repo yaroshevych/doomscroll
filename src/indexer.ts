@@ -59,7 +59,7 @@ export class Indexer {
 
       // Get tags from frontmatter
       if (fileCache?.frontmatter?.tags) {
-        const frontmatterTags = fileCache.frontmatter.tags;
+        const frontmatterTags: unknown = fileCache.frontmatter.tags;
         if (Array.isArray(frontmatterTags)) {
           frontmatterTags.forEach((tag) => {
             if (typeof tag === 'string') {
@@ -123,7 +123,10 @@ export class Indexer {
           // Build new preview
           const content = await this.app.vault.cachedRead(file);
           const fileCache = this.app.metadataCache.getFileCache(file);
-          const frontmatter = fileCache?.frontmatter;
+          const rawFrontmatter: unknown = fileCache?.frontmatter;
+          const frontmatter = isRecord(rawFrontmatter)
+            ? rawFrontmatter
+            : undefined;
 
           const imagePath = extractImage(
             content,
@@ -188,4 +191,8 @@ export class Indexer {
 
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

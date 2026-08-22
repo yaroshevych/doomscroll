@@ -1,6 +1,6 @@
 {
   "name": "doomscroll",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Doomscroll your own notes, not someone else's feed.",
   "main": "main.js",
   "type": "module",

@@ -8,20 +8,15 @@ function hasImageExtension(path: string): boolean {
 
 export function extractImage(
   content: string,
-  frontmatter: Record<string, any> | undefined,
+  frontmatter: Record<string, unknown> | undefined,
   frontmatterImageProps: string[]
 ): string | null {
   if (frontmatter) {
     // Check frontmatter properties in order
     for (const prop of frontmatterImageProps) {
-      if (frontmatter[prop]) {
-        let value = frontmatter[prop];
-        // Handle string values
-        if (typeof value === 'string') {
-          // Strip wikilink brackets if present
-          value = value.replace(/^\[\[/, '').replace(/\]\]$/, '');
-          return value;
-        }
+      const value = frontmatter[prop];
+      if (typeof value === 'string') {
+        return value.replace(/^\[\[/, '').replace(/\]\]$/, '');
       }
     }
   }
@@ -125,9 +120,9 @@ export function extractSnippet(content: string): string {
 
     // Process line: strip markdown syntax
     let processed = line
-      .replace(/^\s*(?:[-*+]\s+)?\[(.)\]\s*/, (_, c) => {
-        if (c === ' ') return '☐ ';
-        if (c.toLowerCase() === 'x') return '✅ ';
+      .replace(/^\s*(?:[-*+]\s+)?\[(.)\]\s*/, (_match, marker: string) => {
+        if (marker === ' ') return '☐ ';
+        if (marker.toLowerCase() === 'x') return '✅ ';
         return '❌ '; // any other marker (-, /, etc.) = cancelled/other status
       }) // checkbox "- [x] text" or "[x] text" -> status emoji + text
       .replace(/==([^=]+)==/g, '$1') // highlight ==text== -> text
@@ -137,8 +132,9 @@ export function extractSnippet(content: string): string {
       .replace(/_([^_]+)_/g, '$1') // italic _text_ -> text
       .replace(/`([^`]+)`/g, '$1') // inline code `text` -> text
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // link [text](url) -> text
-      .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, path, label) =>
-        label || path
+      .replace(
+        /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,
+        (_match, path: string, label?: string) => label ?? path
       ) // wikilink [[path|label]] -> label or [[path]] -> path
       .replace(/^\s*[-*+]\s+/, '') // remove list markers
       .replace(/^\s*\d+\.\s+/, '') // remove numbered list markers

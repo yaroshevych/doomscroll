@@ -1,5 +1,5 @@
 import { Plugin } from 'obsidian';
-import { PluginData } from './types';
+import { PluginData, StoredNotePreview } from './types';
 import { DEFAULT_SETTINGS, DoomscrollSettingTab } from './settings';
 import { Indexer } from './indexer';
 import { DoomscrollView, VIEW_TYPE_DOOMSCROLL } from './view';
@@ -23,7 +23,16 @@ export default class DoomscrollPlugin extends Plugin {
     // an explicit null. Strip them so old vaults' data.json shrinks without
     // a full reindex.
     let migrated = false;
-    for (const preview of Object.values(this.data.previews) as any[]) {
+    type LegacyPreview = Omit<StoredNotePreview, 'imagePath'> & {
+      path?: unknown;
+      title?: unknown;
+      ctime?: unknown;
+      imagePath?: string | null;
+    };
+
+    for (const preview of Object.values(
+      this.data.previews
+    ) as LegacyPreview[]) {
       if (
         'path' in preview ||
         'title' in preview ||
@@ -77,7 +86,7 @@ export default class DoomscrollPlugin extends Plugin {
     )[0];
 
     if (existingLeaf) {
-      this.app.workspace.revealLeaf(existingLeaf);
+      await this.app.workspace.revealLeaf(existingLeaf);
       return;
     }
 
@@ -87,11 +96,11 @@ export default class DoomscrollPlugin extends Plugin {
       type: VIEW_TYPE_DOOMSCROLL,
       active: true,
     });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   async saveSettings(): Promise<void> {
-    await (this as any).saveData(this.data);
+    await this.saveData(this.data);
   }
 
   onunload(): void {
