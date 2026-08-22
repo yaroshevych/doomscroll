@@ -1,6 +1,6 @@
 # Doomscroll
 
-**Doomscroll your own thoughts.**
+**Doomscroll your own notes.**
 
 I used to be an engineering manager on Instagram Reels. Now I am using the same
 feed format to scroll through my own notes.
