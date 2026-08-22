@@ -3,7 +3,7 @@
   "name": "Doomscroll",
   "version": "0.1.0",
   "minAppVersion": "1.7.2",
-  "description": "Rediscover your notes in a randomized, scrollable feed.",
+  "description": "Doomscroll your own notes, not someone else's feed.",
   "author": "yaroshevych",
   "authorUrl": "https://github.com/yaroshevych",
   "isDesktopOnly": false
