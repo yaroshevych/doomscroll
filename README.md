@@ -22,7 +22,7 @@ it to your vault, so you are motivated to engage with your notes.
 
 Same scroll. Your content.
 
-<img src="https://github.com/user-attachments/assets/ea19fad7-01bf-497f-bf1a-3fd3fb48f5de" height="400px" alt="Doomscroll on mobile" />
+<img src="https://github.com/user-attachments/assets/bbb240b2-e7bd-4ee7-af4e-b9f583d74629" height="400px" alt="Doomscroll on mobile" />
 
 ## Features
 
