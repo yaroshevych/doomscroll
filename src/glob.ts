@@ -42,8 +42,11 @@ export function compileGlob(pattern: string): RegExp {
       while (j < pattern.length && pattern[j] !== ']') {
         j++;
       }
-      if (j < pattern.length) {
-        regex += pattern.substring(i, j + 1);
+      const classBody = pattern.substring(i + 1, j);
+      const compiledClass =
+        j < pattern.length ? compileCharacterClass(classBody) : null;
+      if (compiledClass) {
+        regex += compiledClass;
         i = j + 1;
       } else {
         regex += '\\[';
@@ -69,4 +72,30 @@ function escapeRegex(char: string): string {
     return '\\' + char;
   }
   return char;
+}
+
+function compileCharacterClass(body: string): string | null {
+  if (body.length === 0) return null;
+
+  let content = body;
+  let negated = false;
+  if (content[0] === '^' || content[0] === '!') {
+    negated = true;
+    content = content.slice(1);
+  }
+  if (content.length === 0) return null;
+
+  let escaped = '';
+  for (const char of content) {
+    if (char === '\\') {
+      escaped += '\\\\';
+    } else if (char === ']' || char === '[') {
+      escaped += `\\${char}`;
+    } else {
+      // Keep '-' unescaped so ranges such as [a-z] remain supported.
+      escaped += char;
+    }
+  }
+
+  return `[${negated ? '^' : ''}${escaped}]`;
 }

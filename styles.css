@@ -27,6 +27,14 @@
   gap: 0.5rem;
 }
 
+.doomscroll-refresh-status {
+  flex: 1;
+  align-self: center;
+  margin-left: 1rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 .doomscroll-reshuffle-btn,
 .doomscroll-back-btn,
 .doomscroll-settings-btn {
@@ -147,6 +155,32 @@
 
 .doomscroll-settings-header .setting-item-control {
   margin-top: 1rem;
+}
+
+.doomscroll-excluded-folders-list {
+  margin: 0 0 1rem;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+
+.doomscroll-excluded-folder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3rem;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.doomscroll-excluded-folder-item:last-child {
+  border-bottom: none;
+}
+
+.doomscroll-excluded-folder-remove {
+  flex-shrink: 0;
 }
 
 .doomscroll-reshuffle-section {

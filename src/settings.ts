@@ -1,10 +1,52 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
-import type { SettingDefinitionItem } from 'obsidian';
+import {
+  AbstractInputSuggest,
+  App,
+  Notice,
+  normalizePath,
+  PluginSettingTab,
+  Setting,
+} from 'obsidian';
 import DoomscrollPlugin from './main';
 import { PluginSettings } from './types';
 
 const GITHUB_URL = 'https://github.com/yaroshevych/doomscroll';
 const ISSUES_URL = `${GITHUB_URL}/issues`;
+
+class FolderSuggest extends AbstractInputSuggest<string> {
+  inputEl: HTMLInputElement;
+  private cachedFolders: string[] | null = null;
+
+  constructor(app: App, inputEl: HTMLInputElement) {
+    super(app, inputEl);
+    this.inputEl = inputEl;
+  }
+
+  private getFolders(): string[] {
+    if (this.cachedFolders) return this.cachedFolders;
+
+    this.cachedFolders = this.app.vault
+      .getAllFolders()
+      .map((folder) => folder.path)
+      .filter((path) => path.length > 0);
+    return this.cachedFolders;
+  }
+
+  getSuggestions(inputStr: string): string[] {
+    const lowerInput = inputStr.toLowerCase();
+    return this.getFolders().filter((path) =>
+      path.toLowerCase().includes(lowerInput)
+    );
+  }
+
+  renderSuggestion(path: string, el: HTMLElement): void {
+    el.setText(path);
+  }
+
+  selectSuggestion(path: string): void {
+    this.inputEl.value = path;
+    this.close();
+  }
+}
 
 export const DEFAULT_SETTINGS: PluginSettings = {
   batchSize: 20,
@@ -24,114 +66,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  getSettingDefinitions(): SettingDefinitionItem[] {
-    return [
-      {
-        name: 'Doomscroll settings',
-        searchable: false,
-        render: (setting) => {
-          configureHeader(setting);
-        },
-      },
-      {
-        name: 'Batch size',
-        desc: 'Number of cards to show per reshuffle',
-        control: {
-          type: 'dropdown',
-          key: 'batchSize',
-          options: { '10': '10', '20': '20', '50': '50', '100': '100' },
-        },
-      },
-      {
-        name: 'Include media-only notes',
-        desc: 'Show notes that contain only images, PDFs, or other attachments',
-        control: { type: 'toggle', key: 'includeMediaOnlyNotes' },
-      },
-      {
-        name: 'Open notes in',
-        desc: 'Choose where a card opens',
-        control: {
-          type: 'dropdown',
-          key: 'openNoteBehavior',
-          options: {
-            tab: 'New tab',
-            reuse: 'Reuse current tab',
-            window: 'New window',
-          },
-        },
-      },
-      {
-        name: 'Exclude folders',
-        desc: 'Folder paths to skip (one per line)',
-        control: { type: 'textarea', key: 'excludeFolders', rows: 4 },
-      },
-      {
-        name: 'Exclude tags',
-        desc: 'Tags to skip without # (one per line)',
-        control: { type: 'textarea', key: 'excludeTags', rows: 4 },
-      },
-      {
-        name: 'Exclude filename globs',
-        desc: 'Glob patterns to skip (one per line, e.g., _*)',
-        control: { type: 'textarea', key: 'excludeGlobs', rows: 4 },
-      },
-      {
-        name: 'Frontmatter image properties',
-        desc: 'Property names to check for images in frontmatter (one per line)',
-        control: {
-          type: 'textarea',
-          key: 'frontmatterImageProps',
-          rows: 4,
-        },
-      },
-    ];
-  }
-
-  getControlValue(key: string): unknown {
-    const settings = this.plugin.data.settings;
-
-    switch (key) {
-      case 'batchSize':
-        return String(settings.batchSize);
-      case 'includeMediaOnlyNotes':
-        return settings.includeMediaOnlyNotes;
-      case 'openNoteBehavior':
-        return settings.openNoteBehavior;
-      case 'excludeFolders':
-      case 'excludeTags':
-      case 'excludeGlobs':
-      case 'frontmatterImageProps':
-        return settings[key].join('\n');
-      default:
-        return undefined;
-    }
-  }
-
-  async setControlValue(key: string, value: unknown): Promise<void> {
-    if (key === 'includeMediaOnlyNotes' && typeof value === 'boolean') {
-      this.plugin.data.settings.includeMediaOnlyNotes = value;
-    } else if (key === 'batchSize' && typeof value === 'string') {
-      this.plugin.data.settings.batchSize = Number(value);
-    } else if (
-      key === 'openNoteBehavior' &&
-      (value === 'tab' || value === 'reuse' || value === 'window')
-    ) {
-      this.plugin.data.settings.openNoteBehavior = value;
-    } else if (
-      typeof value === 'string' &&
-      (key === 'excludeFolders' ||
-        key === 'excludeTags' ||
-        key === 'excludeGlobs' ||
-        key === 'frontmatterImageProps')
-    ) {
-      this.plugin.data.settings[key] = parseLines(value);
-    } else {
-      return;
-    }
-
-    await this.plugin.saveSettings();
-  }
-
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -147,7 +81,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(String(this.plugin.data.settings.batchSize))
           .onChange(async (value) => {
             this.plugin.data.settings.batchSize = Number(value);
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettingsAndRefreshViews();
           })
       );
 
@@ -159,7 +93,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.includeMediaOnlyNotes)
           .onChange(async (value) => {
             this.plugin.data.settings.includeMediaOnlyNotes = value;
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettingsAndRefreshViews();
           })
       );
 
@@ -179,19 +113,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               return;
             }
             this.plugin.data.settings.openNoteBehavior = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Exclude folders')
-      .setDesc('Folder paths to skip (one per line)')
-      .addTextArea((text) =>
-        text
-          .setValue(this.plugin.data.settings.excludeFolders.join('\n'))
-          .onChange(async (value) => {
-            this.plugin.data.settings.excludeFolders = parseLines(value);
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettingsAndRefreshViews();
           })
       );
 
@@ -203,19 +125,19 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.excludeTags.join('\n'))
           .onChange(async (value) => {
             this.plugin.data.settings.excludeTags = parseLines(value);
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettingsAndRefreshViews();
           })
       );
 
     new Setting(containerEl)
-      .setName('Exclude filename globs')
-      .setDesc('Glob patterns to skip (one per line, e.g., _*)')
+      .setName('Exclude filename patterns')
+      .setDesc('Filename patterns to skip (one per line, e.g., _*)')
       .addTextArea((text) =>
         text
           .setValue(this.plugin.data.settings.excludeGlobs.join('\n'))
           .onChange(async (value) => {
             this.plugin.data.settings.excludeGlobs = parseLines(value);
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettingsAndRefreshViews();
           })
       );
 
@@ -229,10 +151,73 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.frontmatterImageProps.join('\n'))
           .onChange(async (value) => {
             this.plugin.data.settings.frontmatterImageProps = parseLines(value);
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettingsAndRefreshViews();
           })
       );
+
+    new Setting(containerEl).setName('Excluded folders').setHeading();
+
+    const excludedFoldersList = containerEl.createDiv(
+      'doomscroll-excluded-folders-list'
+    );
+    this.renderExcludedFolders(excludedFoldersList);
+
+    let folderInputEl: HTMLInputElement;
+    new Setting(containerEl)
+      .setName('Add excluded folder')
+      .setDesc('Folders to exclude from the feed')
+      .addText((text) => {
+        text.setPlaceholder('4. Archive');
+        folderInputEl = text.inputEl;
+        new FolderSuggest(this.app, folderInputEl);
+      })
+      .addButton((button) =>
+        button.setButtonText('Add').onClick(async () => {
+          const folder = normalizeFolderPath(folderInputEl.value);
+          if (!folder || folder === '.') {
+            new Notice('Excluded folder path cannot be empty or the vault root');
+            return;
+          }
+          if (this.plugin.data.settings.excludeFolders.includes(folder)) {
+            new Notice('That folder is already excluded');
+            return;
+          }
+
+          this.plugin.data.settings.excludeFolders.push(folder);
+          await this.plugin.saveSettingsAndRefreshViews();
+          folderInputEl.value = '';
+          this.renderExcludedFolders(excludedFoldersList);
+        })
+      );
   }
+
+  private renderExcludedFolders(container: HTMLElement): void {
+    container.empty();
+
+    if (this.plugin.data.settings.excludeFolders.length === 0) {
+      container.createDiv({ text: 'No excluded folders' });
+      return;
+    }
+
+    for (const folder of this.plugin.data.settings.excludeFolders) {
+      const row = container.createDiv('doomscroll-excluded-folder-item');
+      row.createSpan({ text: folder });
+      row
+        .createEl('button', {
+          text: '×',
+          cls: 'doomscroll-excluded-folder-remove',
+          attr: { 'aria-label': `Remove excluded folder ${folder}` },
+        })
+        .addEventListener('click', async () => {
+          const index = this.plugin.data.settings.excludeFolders.indexOf(folder);
+          if (index === -1) return;
+          this.plugin.data.settings.excludeFolders.splice(index, 1);
+          await this.plugin.saveSettingsAndRefreshViews();
+          this.renderExcludedFolders(container);
+        });
+    }
+  }
+
 }
 
 function configureHeader(setting: Setting): void {
@@ -257,4 +242,8 @@ function parseLines(value: string): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+}
+
+function normalizeFolderPath(value: string): string {
+  return normalizePath(value.trim()).replace(/\/+$/, '');
 }

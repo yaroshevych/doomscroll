@@ -33,6 +33,11 @@ export class DoomscrollView extends ItemView {
   batchHistory: NotePreview[][] = [];
   batchHistoryCursor: number = -1;
   backButton: HTMLButtonElement | null = null;
+  private refreshStatusEl: HTMLElement | null = null;
+  private isRefreshing = false;
+  private pendingSettingsRefresh = false;
+  private freshIndexLoaded = false;
+  private batchSettingsKey: string | null = null;
   private historySaveTimer: number | null = null;
   private historySavePending = false;
   private restoredScrollTop = 0;
@@ -71,6 +76,10 @@ export class DoomscrollView extends ItemView {
   }
 
   async setState(state: unknown): Promise<void> {
+    // The first index refresh is authoritative for this view session. Ignore
+    // a late workspace restore so it cannot put an old batch back on screen.
+    if (this.freshIndexLoaded) return;
+
     const restored = parseViewState(state);
     if (!restored) return;
 
@@ -95,6 +104,51 @@ export class DoomscrollView extends ItemView {
     await this.render();
   }
 
+  async refreshForCurrentSettings(): Promise<void> {
+    if (this.isRefreshing) {
+      this.pendingSettingsRefresh = true;
+      return;
+    }
+
+    this.setRefreshing(true);
+    let indexRefreshed = false;
+    let refreshFailed = false;
+    try {
+      indexRefreshed = await this.plugin.indexer.refreshIfStale();
+      if (this.batchSettingsKey !== this.getBatchSettingsKey()) {
+        indexRefreshed =
+          (await this.plugin.indexer.refreshIfStale()) || indexRefreshed;
+      }
+    } catch (error) {
+      console.error('Error refreshing vault index:', error);
+      refreshFailed = true;
+    } finally {
+      this.setRefreshing(false);
+    }
+
+    const settingsChanged =
+      this.batchSettingsKey !== this.getBatchSettingsKey();
+    if (!refreshFailed && (indexRefreshed || settingsChanged)) {
+      this.currentBatch = [];
+      if (settingsChanged) {
+        this.batchHistory = [];
+        this.batchHistoryCursor = -1;
+      } else {
+        this.revalidateBatchHistory();
+      }
+
+      if (this.hasRendered) {
+        this.renderBatch();
+        this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
+      }
+    }
+
+    if (this.pendingSettingsRefresh) {
+      this.pendingSettingsRefresh = false;
+      await this.refreshForCurrentSettings();
+    }
+  }
+
   private async render(): Promise<void> {
     this.containerEl.empty();
     this.containerEl.addClass('doomscroll-view-container');
@@ -106,6 +160,8 @@ export class DoomscrollView extends ItemView {
     title.textContent = 'Doomscroll';
     title.className = 'doomscroll-title';
 
+    this.refreshStatusEl = header.createDiv('doomscroll-refresh-status');
+    this.refreshStatusEl.setAttribute('aria-live', 'polite');
     const controls = header.createDiv('doomscroll-controls');
 
     // Reshuffle button (refresh icon)
@@ -122,7 +178,9 @@ export class DoomscrollView extends ItemView {
     this.backButton.className = 'doomscroll-back-btn';
     this.backButton.setAttribute('aria-label', 'Previous card set');
     setIcon(this.backButton, 'arrow-left');
-    this.backButton.addEventListener('click', () => this.showPreviousBatch());
+    this.backButton.addEventListener('click', () => {
+      void this.showPreviousBatch();
+    });
     this.updateBackButton();
 
     // Settings button
@@ -146,8 +204,9 @@ export class DoomscrollView extends ItemView {
       { passive: true }
     );
 
-    // The first run must build an index before there is anything to display.
-    // Existing indexes are refreshed only after an explicit reshuffle.
+    // Refresh on every plugin session so a persisted index cannot outlive the
+    // filters that were active when it was created. The indexer also detects
+    // filter changes made while the plugin is running.
     const needsInitialIndex = Object.keys(this.plugin.data.previews).length === 0;
     const loadingEl = needsInitialIndex
       ? bodyContainer.createDiv('doomscroll-loading')
@@ -156,23 +215,39 @@ export class DoomscrollView extends ItemView {
       loadingEl.textContent = 'Indexing your vault…';
     }
 
-    if (needsInitialIndex) {
-      try {
-        await this.plugin.indexer.refreshIfStale(
-          (done, total) => {
-            if (loadingEl) {
-              loadingEl.textContent = `Indexed ${done}/${total}`;
-            }
-          },
-          true
-        );
+    let indexRefreshed = false;
+    let indexRefreshSucceeded = false;
+    this.setRefreshing(true);
+    try {
+      indexRefreshed = await this.plugin.indexer.refreshIfStale(
+        (done, total) => {
+          if (loadingEl) {
+            loadingEl.textContent = `Indexed ${done}/${total}`;
+          }
+        },
+        needsInitialIndex
+      );
+      indexRefreshSucceeded = true;
+      if (indexRefreshed) {
         await this.plugin.saveSettings();
-      } catch (error) {
-        console.error('Error indexing vault:', error);
-        if (loadingEl) {
-          loadingEl.textContent = 'Error indexing vault';
-        }
       }
+    } catch (error) {
+      console.error('Error indexing vault:', error);
+      if (loadingEl) {
+        loadingEl.textContent = 'Error indexing vault';
+      }
+    } finally {
+      this.setRefreshing(false);
+    }
+
+    // A restored batch was built from the previous session's index and may
+    // contain notes excluded by the current settings.
+    if (indexRefreshSucceeded) {
+      this.freshIndexLoaded = true;
+      this.currentBatch = [];
+      this.batchHistory = [];
+      this.batchHistoryCursor = -1;
+      this.batchSettingsKey = null;
     }
     loadingEl?.remove();
 
@@ -225,6 +300,7 @@ export class DoomscrollView extends ItemView {
         this.plugin.data.settings.batchSize,
         Date.now()
       );
+      this.batchSettingsKey = this.getBatchSettingsKey();
       if (
         previousOrder &&
         this.currentBatch.length > 1 &&
@@ -293,36 +369,59 @@ export class DoomscrollView extends ItemView {
     const reshuffleBtn = reshuffleSection.createEl('button');
     reshuffleBtn.className = 'doomscroll-reshuffle-end-btn';
     reshuffleBtn.textContent = 'Reshuffle';
+    reshuffleBtn.dataset.defaultLabel = 'Reshuffle';
     reshuffleBtn.addEventListener('click', () => {
       void this.showNewBatch();
     });
   }
 
-  private showNewBatch(): void {
+  private async showNewBatch(): Promise<void> {
+    if (this.isRefreshing) return;
+
     const previousOrder = this.currentBatch.map((preview) => preview.path);
-    this.currentBatch = [];
-    this.renderBatch(previousOrder);
-    this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
+    this.setRefreshing(true);
 
-    // Let the cached reshuffle paint first. Vault enumeration still runs on
-    // the UI thread because Obsidian's API is unavailable inside Web Workers.
-    window.setTimeout(() => {
-      void this.refreshIndexInBackground();
-    }, 0);
-  }
-
-  private async refreshIndexInBackground(): Promise<void> {
     try {
-      const refreshed = await this.plugin.indexer.refreshIfStale();
-      if (refreshed) {
-        await this.plugin.saveSettings();
+      let indexRefreshed = await this.plugin.indexer.refreshIfStale();
+      // Settings may have changed while the first rebuild was in progress.
+      // Run the indexer again for the final settings before selecting a batch.
+      if (this.batchSettingsKey !== this.getBatchSettingsKey()) {
+        indexRefreshed =
+          (await this.plugin.indexer.refreshIfStale()) || indexRefreshed;
       }
+
+      const settingsChanged =
+        this.batchSettingsKey !== this.getBatchSettingsKey();
+      this.currentBatch = [];
+
+      if (settingsChanged) {
+        this.batchHistory = [];
+        this.batchHistoryCursor = -1;
+      } else if (indexRefreshed) {
+        this.revalidateBatchHistory();
+      }
+
+      this.renderBatch(
+        settingsChanged || indexRefreshed ? undefined : previousOrder
+      );
+      this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
     } catch (error) {
       console.error('Error refreshing vault index:', error);
+    } finally {
+      this.setRefreshing(false);
+      if (this.pendingSettingsRefresh) {
+        this.pendingSettingsRefresh = false;
+        await this.refreshForCurrentSettings();
+      }
     }
   }
 
-  private showPreviousBatch(): void {
+  private async showPreviousBatch(): Promise<void> {
+    if (this.batchSettingsKey !== this.getBatchSettingsKey()) {
+      await this.refreshForCurrentSettings();
+      return;
+    }
+
     const previousCursor = this.batchHistoryCursor + 1;
     const previousBatch = this.batchHistory[previousCursor];
     if (!previousBatch) return;
@@ -346,6 +445,51 @@ export class DoomscrollView extends ItemView {
     if (body) {
       this.renderBatchIntoContainer(body as HTMLElement, previousOrder);
     }
+  }
+
+  private revalidateBatchHistory(): void {
+    const previousCursor = this.batchHistoryCursor;
+    const retained: Array<{ oldIndex: number; batch: NotePreview[] }> = [];
+
+    this.batchHistory.forEach((batch, oldIndex) => {
+      const nextBatch = this.resolvePreviewPaths(
+        batch.map((preview) => preview.path)
+      );
+      if (nextBatch.length > 0) {
+        retained.push({ oldIndex, batch: nextBatch });
+      }
+    });
+
+    this.batchHistory = retained.map(({ batch }) => batch);
+    const retainedCursor = retained.findIndex(
+      ({ oldIndex }) => oldIndex === previousCursor
+    );
+    this.batchHistoryCursor =
+      retainedCursor >= 0
+        ? retainedCursor
+        : Math.min(previousCursor, this.batchHistory.length - 1);
+  }
+
+  private setRefreshing(refreshing: boolean): void {
+    this.isRefreshing = refreshing;
+    if (this.refreshStatusEl) {
+      this.refreshStatusEl.textContent = refreshing ? 'Indexing…' : '';
+    }
+
+    const buttons = this.containerEl.querySelectorAll<HTMLButtonElement>(
+      '.doomscroll-reshuffle-btn, .doomscroll-reshuffle-end-btn'
+    );
+    buttons.forEach((button) => {
+      button.disabled = refreshing;
+      if (button.classList.contains('doomscroll-reshuffle-end-btn')) {
+        const defaultLabel = button.dataset.defaultLabel ?? 'Reshuffle';
+        button.textContent = refreshing ? 'Indexing…' : defaultLabel;
+      }
+    });
+  }
+
+  private getBatchSettingsKey(): string {
+    return JSON.stringify(this.plugin.data.settings);
   }
 
   private renderCard(

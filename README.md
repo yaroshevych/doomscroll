@@ -64,7 +64,7 @@ Same scroll. Your content.
 - **Batch size** (5 to 50): How many cards to show per reshuffle (default: 20)
 - **Exclude folders**: Folder paths to skip (one per line)
 - **Exclude tags**: Tag names to skip without # (one per line)
-- **Exclude filename globs**: Glob patterns to skip (one per line, e.g., `_*` for drafts)
+- **Exclude filename patterns**: Patterns to skip (one per line, e.g., `_*` for drafts)
 - **Frontmatter image properties**: Property names to check for images (default: `cover`, `image`, `banner`)
 
 ## Usage

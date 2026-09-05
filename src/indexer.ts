@@ -9,6 +9,7 @@ export class Indexer {
   app: App;
   data: PluginData;
   private lastRefreshStartedAt = 0;
+  private lastIndexedSettingsKey: string | null = null;
   private refreshPromise: Promise<void> | null = null;
 
   constructor(app: App, data: PluginData) {
@@ -22,11 +23,16 @@ export class Indexer {
   ): Promise<boolean> {
     if (this.refreshPromise) {
       await this.refreshPromise;
+      // The caller waited for another refresh; it did not start one itself.
       return false;
     }
 
+    const settingsKey = this.getIndexSettingsKey();
+    const settingsChanged = settingsKey !== this.lastIndexedSettingsKey;
+
     if (
       !force &&
+      !settingsChanged &&
       Date.now() - this.lastRefreshStartedAt < INDEX_REFRESH_INTERVAL_MS
     ) {
       return false;
@@ -37,10 +43,22 @@ export class Indexer {
 
     try {
       await this.refreshPromise;
+      // Keep the key captured at refresh start. If settings changed while an
+      // index was being built, the next refresh will rebuild for the new key.
+      this.lastIndexedSettingsKey = settingsKey;
       return true;
     } finally {
       this.refreshPromise = null;
     }
+  }
+
+  private getIndexSettingsKey(): string {
+    return JSON.stringify({
+      excludeFolders: this.data.settings.excludeFolders,
+      excludeTags: this.data.settings.excludeTags,
+      excludeGlobs: this.data.settings.excludeGlobs,
+      frontmatterImageProps: this.data.settings.frontmatterImageProps,
+    });
   }
 
   getCandidateFiles(): TFile[] {
@@ -57,11 +75,14 @@ export class Indexer {
     for (const file of allFiles) {
       // Filter out files inside any excluded folder.
       let excluded = false;
+      const filePath = file.path.toLowerCase();
+      const fileName = file.path.slice(file.path.lastIndexOf('/') + 1);
 
       for (const folderPath of excludeFolders) {
+        const normalizedFolderPath = folderPath.toLowerCase();
         if (
-          file.path === folderPath ||
-          file.path.startsWith(`${folderPath}/`)
+          filePath === normalizedFolderPath ||
+          filePath.startsWith(`${normalizedFolderPath}/`)
         ) {
           excluded = true;
           break;
@@ -72,9 +93,11 @@ export class Indexer {
         continue;
       }
 
-      // Filter out files matching any excludeGlobs
+      // Match filename patterns against both the full vault path and the
+      // filename, so `Daily/*` can target a folder while `*.draft.md` or
+      // `*.*` works for files in any folder.
       for (const glob of excludeGlobs) {
-        if (glob.test(file.path)) {
+        if (glob.test(file.path) || glob.test(fileName)) {
           excluded = true;
           break;
         }

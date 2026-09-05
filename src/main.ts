@@ -1,4 +1,4 @@
-import { Plugin } from 'obsidian';
+import { Plugin, normalizePath } from 'obsidian';
 import { PluginData, StoredNotePreview } from './types';
 import { DEFAULT_SETTINGS, DoomscrollSettingTab } from './settings';
 import { Indexer } from './indexer';
@@ -7,6 +7,7 @@ import { DoomscrollView, VIEW_TYPE_DOOMSCROLL } from './view';
 export default class DoomscrollPlugin extends Plugin {
   data!: PluginData;
   indexer!: Indexer;
+  private settingsRefreshTimer: number | null = null;
 
   async onload(): Promise<void> {
     // Load data
@@ -48,6 +49,22 @@ export default class DoomscrollPlugin extends Plugin {
         migrated = true;
       }
     }
+
+    const normalizedExcludedFolders = Array.from(
+      new Set(
+        this.data.settings.excludeFolders
+          .map((folder) => normalizePath(folder.trim()).replace(/\/+$/, ''))
+          .filter((folder) => folder.length > 0 && folder !== '.')
+      )
+    );
+    if (
+      JSON.stringify(normalizedExcludedFolders) !==
+      JSON.stringify(this.data.settings.excludeFolders)
+    ) {
+      this.data.settings.excludeFolders = normalizedExcludedFolders;
+      migrated = true;
+    }
+
     if (migrated) {
       await this.saveSettings();
     }
@@ -87,6 +104,10 @@ export default class DoomscrollPlugin extends Plugin {
 
     if (existingLeaf) {
       await this.app.workspace.revealLeaf(existingLeaf);
+      const view = existingLeaf.view;
+      if (view instanceof DoomscrollView) {
+        await view.refreshForCurrentSettings();
+      }
       return;
     }
 
@@ -103,7 +124,31 @@ export default class DoomscrollPlugin extends Plugin {
     await this.saveData(this.data);
   }
 
+  async saveSettingsAndRefreshViews(): Promise<void> {
+    await this.saveSettings();
+    this.scheduleViewRefresh();
+  }
+
+  private scheduleViewRefresh(): void {
+    if (this.settingsRefreshTimer !== null) {
+      window.clearTimeout(this.settingsRefreshTimer);
+    }
+
+    this.settingsRefreshTimer = window.setTimeout(() => {
+      this.settingsRefreshTimer = null;
+      const views = this.app.workspace
+        .getLeavesOfType(VIEW_TYPE_DOOMSCROLL)
+        .map((leaf) => leaf.view)
+        .filter((view): view is DoomscrollView => view instanceof DoomscrollView);
+
+      void Promise.all(views.map((view) => view.refreshForCurrentSettings()));
+    }, 250);
+  }
+
   onunload(): void {
-    // Nothing destructive needed
+    if (this.settingsRefreshTimer !== null) {
+      window.clearTimeout(this.settingsRefreshTimer);
+      this.settingsRefreshTimer = null;
+    }
   }
 }
