@@ -50,7 +50,7 @@ export class DoomscrollView extends ItemView {
   private historySaveTimer: number | null = null;
   private historySavePending = false;
   private restoredScrollTop = 0;
-  private renderedSnippetCache = new Map<string, string>();
+  private renderedSnippetCache = new Map<string, HTMLElement>();
   private renderedSimplifiedView: boolean | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
@@ -525,22 +525,28 @@ export class DoomscrollView extends ItemView {
     return this.plugin.data.settings.simplifiedView !== false;
   }
 
-  private setSnippetHtml(
+  private setSnippetContent(
     snippetEl: HTMLElement,
-    html: string,
+    renderedRoot: HTMLElement,
     simplified: boolean
   ): void {
     snippetEl.classList.toggle('doomscroll-card-snippet-simple', simplified);
     snippetEl.classList.toggle('doomscroll-card-snippet-markdown', !simplified);
     snippetEl.classList.toggle('markdown-rendered', !simplified);
-    snippetEl.innerHTML = html;
+
+    const clone = renderedRoot.cloneNode(true) as HTMLElement;
+    if (clone.childNodes.length === 0) {
+      snippetEl.textContent = '(no preview text)';
+      return;
+    }
+    snippetEl.replaceChildren(...Array.from(clone.childNodes));
   }
 
-  private cacheRenderedSnippet(key: string, html: string): void {
+  private cacheRenderedSnippet(key: string, renderedRoot: HTMLElement): void {
     // Map insertion order gives us a small LRU cache without retaining every
     // file ever visited during a long-lived Doomscroll session.
     this.renderedSnippetCache.delete(key);
-    this.renderedSnippetCache.set(key, html);
+    this.renderedSnippetCache.set(key, renderedRoot);
     while (this.renderedSnippetCache.size > MAX_RENDERED_SNIPPET_CACHE_ENTRIES) {
       const oldestKey = this.renderedSnippetCache.keys().next().value;
       if (typeof oldestKey !== 'string') break;
@@ -610,7 +616,7 @@ export class DoomscrollView extends ItemView {
     const cached = this.renderedSnippetCache.get(cacheKey);
     if (cached !== undefined) {
       this.cacheRenderedSnippet(cacheKey, cached);
-      this.setSnippetHtml(snippetEl, cached, simplified);
+      this.setSnippetContent(snippetEl, cached, simplified);
       return;
     }
 
@@ -620,7 +626,7 @@ export class DoomscrollView extends ItemView {
       const rendered = document.createElement('div');
       const renderComponent = new Component();
       renderComponent.load();
-      let snippet: string;
+      let prepared: HTMLElement;
       try {
         await MarkdownRenderer.renderMarkdown(
           markdown,
@@ -629,14 +635,13 @@ export class DoomscrollView extends ItemView {
           renderComponent
         );
 
-        const prepared = prepareRenderedPreview(rendered, simplified);
-        snippet = prepared.innerHTML || '(no preview text)';
+        prepared = prepareRenderedPreview(rendered, simplified);
       } finally {
         renderComponent.unload();
       }
-      this.cacheRenderedSnippet(cacheKey, snippet);
+      this.cacheRenderedSnippet(cacheKey, prepared);
       if (snippetEl.isConnected) {
-        this.setSnippetHtml(snippetEl, snippet, simplified);
+        this.setSnippetContent(snippetEl, prepared, simplified);
       }
     } catch (error) {
       console.error(`Error rendering preview for ${file.path}:`, error);
