@@ -1,5 +1,13 @@
-import { ItemView, WorkspaceLeaf, TFile, setIcon } from 'obsidian';
+import {
+  ItemView,
+  Component,
+  MarkdownRenderer,
+  WorkspaceLeaf,
+  TFile,
+  setIcon,
+} from 'obsidian';
 import DoomscrollPlugin from './main';
+import { preparePreviewMarkdown, prepareRenderedPreview } from './extract';
 import { NotePreview, toNotePreview } from './types';
 import { selectBatch } from './selector';
 import { recordView } from './history';
@@ -7,6 +15,7 @@ import { recordView } from './history';
 export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view';
 const HISTORY_SAVE_DELAY_MS = 2_000;
 const MAX_BATCH_HISTORY = 20;
+const MAX_RENDERED_SNIPPET_CACHE_ENTRIES = 100;
 
 interface AppWithSettings {
   setting: {
@@ -41,6 +50,8 @@ export class DoomscrollView extends ItemView {
   private historySaveTimer: number | null = null;
   private historySavePending = false;
   private restoredScrollTop = 0;
+  private renderedSnippetCache = new Map<string, string>();
+  private renderedSimplifiedView: boolean | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
     super(leaf);
@@ -128,13 +139,19 @@ export class DoomscrollView extends ItemView {
 
     const settingsChanged =
       this.batchSettingsKey !== this.getBatchSettingsKey();
-    if (!refreshFailed && (indexRefreshed || settingsChanged)) {
-      this.currentBatch = [];
+    const previewModeChanged =
+      this.renderedSimplifiedView !== this.isSimplifiedView();
+    if (!refreshFailed && (indexRefreshed || settingsChanged || previewModeChanged)) {
+      if (indexRefreshed || settingsChanged) {
+        this.currentBatch = [];
+      }
       if (settingsChanged) {
         this.batchHistory = [];
         this.batchHistoryCursor = -1;
-      } else {
+      } else if (indexRefreshed) {
         this.revalidateBatchHistory();
+      } else if (previewModeChanged) {
+        this.renderedSnippetCache.clear();
       }
 
       if (this.hasRendered) {
@@ -319,6 +336,7 @@ export class DoomscrollView extends ItemView {
       this.batchHistoryCursor = 0;
     }
 
+    this.renderedSimplifiedView = this.isSimplifiedView();
     this.updateBackButton();
 
     // Stop observing cards from the previous batch before replacing them.
@@ -334,6 +352,14 @@ export class DoomscrollView extends ItemView {
 
           const card = entry.target as HTMLElement;
           const path = card.dataset.path;
+          const preview = this.currentBatch.find(
+            (candidate) => candidate.path === path
+          );
+          const snippetEl = card.querySelector('.doomscroll-card-snippet');
+          if (preview && snippetEl instanceof HTMLElement) {
+            void this.renderSnippet(preview, snippetEl);
+          }
+
           if (path && !this.viewedPathsInBatch.has(path)) {
             this.viewedPathsInBatch.add(path);
             this.plugin.data.history = recordView(
@@ -489,7 +515,37 @@ export class DoomscrollView extends ItemView {
   }
 
   private getBatchSettingsKey(): string {
-    return JSON.stringify(this.plugin.data.settings);
+    const { simplifiedView: _simplifiedView, ...batchSettings } =
+      this.plugin.data.settings;
+    return JSON.stringify(batchSettings);
+  }
+
+  private isSimplifiedView(): boolean {
+    // Treat missing values from pre-setting data.json files as the default.
+    return this.plugin.data.settings.simplifiedView !== false;
+  }
+
+  private setSnippetHtml(
+    snippetEl: HTMLElement,
+    html: string,
+    simplified: boolean
+  ): void {
+    snippetEl.classList.toggle('doomscroll-card-snippet-simple', simplified);
+    snippetEl.classList.toggle('doomscroll-card-snippet-markdown', !simplified);
+    snippetEl.classList.toggle('markdown-rendered', !simplified);
+    snippetEl.innerHTML = html;
+  }
+
+  private cacheRenderedSnippet(key: string, html: string): void {
+    // Map insertion order gives us a small LRU cache without retaining every
+    // file ever visited during a long-lived Doomscroll session.
+    this.renderedSnippetCache.delete(key);
+    this.renderedSnippetCache.set(key, html);
+    while (this.renderedSnippetCache.size > MAX_RENDERED_SNIPPET_CACHE_ENTRIES) {
+      const oldestKey = this.renderedSnippetCache.keys().next().value;
+      if (typeof oldestKey !== 'string') break;
+      this.renderedSnippetCache.delete(oldestKey);
+    }
   }
 
   private renderCard(
@@ -526,17 +582,68 @@ export class DoomscrollView extends ItemView {
       this.setupImageLazyLoad(img);
     }
 
-    // Snippet
-    const snippetEl = card.createEl('p');
-    snippetEl.className = 'doomscroll-card-snippet';
-    snippetEl.textContent = preview.snippet;
+    // Snippet is rendered on demand from a bounded Markdown fragment.
+    const snippetEl = card.createDiv('doomscroll-card-snippet');
+    snippetEl.textContent = 'Loading preview…';
 
     // Click handler
     card.addEventListener('click', () => {
+      void this.renderSnippet(preview, snippetEl);
       void this.openPreview(preview);
     });
 
     return card;
+  }
+
+  private async renderSnippet(
+    preview: NotePreview,
+    snippetEl: HTMLElement
+  ): Promise<void> {
+    const file = this.plugin.app.vault.getAbstractFileByPath(preview.path);
+    if (!(file instanceof TFile)) {
+      snippetEl.textContent = '(no preview text)';
+      return;
+    }
+
+    const simplified = this.isSimplifiedView();
+    const cacheKey = `${simplified ? 'simplified' : 'markdown'}:${file.path}:${file.stat.mtime}`;
+    const cached = this.renderedSnippetCache.get(cacheKey);
+    if (cached !== undefined) {
+      this.cacheRenderedSnippet(cacheKey, cached);
+      this.setSnippetHtml(snippetEl, cached, simplified);
+      return;
+    }
+
+    try {
+      const content = await this.plugin.app.vault.cachedRead(file);
+      const markdown = preparePreviewMarkdown(content);
+      const rendered = document.createElement('div');
+      const renderComponent = new Component();
+      renderComponent.load();
+      let snippet: string;
+      try {
+        await MarkdownRenderer.renderMarkdown(
+          markdown,
+          rendered,
+          file.path,
+          renderComponent
+        );
+
+        const prepared = prepareRenderedPreview(rendered, simplified);
+        snippet = prepared.innerHTML || '(no preview text)';
+      } finally {
+        renderComponent.unload();
+      }
+      this.cacheRenderedSnippet(cacheKey, snippet);
+      if (snippetEl.isConnected) {
+        this.setSnippetHtml(snippetEl, snippet, simplified);
+      }
+    } catch (error) {
+      console.error(`Error rendering preview for ${file.path}:`, error);
+      if (snippetEl.isConnected) {
+        snippetEl.textContent = preview.snippet ?? '(no preview text)';
+      }
+    }
   }
 
   private async openPreview(preview: NotePreview): Promise<void> {
@@ -633,6 +740,7 @@ export class DoomscrollView extends ItemView {
       this.imageObserver.disconnect();
       this.imageObserver = null;
     }
+    this.renderedSnippetCache.clear();
     if (this.historySaveTimer !== null) {
       window.clearTimeout(this.historySaveTimer);
       this.historySaveTimer = null;
@@ -657,7 +765,7 @@ function isMediaOnlyPreview(preview: NotePreview): boolean {
   // Older cached previews predate the explicit mediaOnly flag.
   return (
     (Boolean(preview.imagePath) && preview.snippet === '(no preview text)') ||
-    /^📎 .+ attached$/.test(preview.snippet)
+    /^📎 .+ attached$/.test(preview.snippet ?? '')
   );
 }
 

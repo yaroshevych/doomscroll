@@ -3,6 +3,7 @@ export type OpenNoteBehavior = 'tab' | 'reuse' | 'window';
 export interface PluginSettings {
   batchSize: number;
   includeMediaOnlyNotes: boolean;
+  simplifiedView: boolean;
   openNoteBehavior: OpenNoteBehavior;
   excludeFolders: string[];
   excludeTags: string[];
@@ -19,7 +20,9 @@ export interface StoredNotePreview {
   // don't, and skipping the key avoids paying for "imagePath":null on each.
   imagePath?: string;
   mediaOnly?: true;
-  snippet: string;
+  // Legacy cached previews may still contain a snippet. New previews render
+  // snippets on demand so this field is intentionally optional.
+  snippet?: string;
 }
 
 export interface NotePreview extends StoredNotePreview {
@@ -36,6 +39,7 @@ export interface PluginData {
   settings: PluginSettings;
   previews: Record<string, StoredNotePreview>;
   history: ViewHistoryEntry[];
+  indexFormatVersion: number;
 }
 
 export function titleFromPath(path: string): string {

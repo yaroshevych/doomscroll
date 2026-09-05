@@ -51,6 +51,7 @@ class FolderSuggest extends AbstractInputSuggest<string> {
 export const DEFAULT_SETTINGS: PluginSettings = {
   batchSize: 20,
   includeMediaOnlyNotes: true,
+  simplifiedView: true,
   openNoteBehavior: 'tab',
   excludeFolders: [],
   excludeTags: [],
@@ -93,6 +94,20 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.includeMediaOnlyNotes)
           .onChange(async (value) => {
             this.plugin.data.settings.includeMediaOnlyNotes = value;
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Simplified view')
+      .setDesc(
+        'Show concise previews with readable tables, links, and code; turn off for full Markdown formatting.'
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.data.settings.simplifiedView !== false)
+          .onChange(async (value) => {
+            this.plugin.data.settings.simplifiedView = value;
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );

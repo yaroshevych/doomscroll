@@ -1,6 +1,10 @@
 import { App, TFile } from 'obsidian';
 import { PluginData, StoredNotePreview } from './types';
-import { extractImage, extractSnippet } from './extract';
+import {
+  extractImage,
+  hasMediaEmbed,
+  hasTextualPreviewContent,
+} from './extract';
 import { compileGlob } from './glob';
 
 const INDEX_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -192,16 +196,14 @@ export class Indexer {
             frontmatter,
             this.data.settings.frontmatterImageProps
           );
-          const snippet = extractSnippet(content);
           const mediaOnly =
-            (Boolean(imagePath) && snippet === '(no preview text)') ||
-            /^📎 .+ attached$/.test(snippet);
+            (Boolean(imagePath) || hasMediaEmbed(content)) &&
+            !hasTextualPreviewContent(content);
 
           const preview: StoredNotePreview = {
             mtime: file.stat.mtime,
             ...(imagePath ? { imagePath } : {}),
             ...(mediaOnly ? { mediaOnly: true as const } : {}),
-            snippet: snippet,
           };
 
           this.data.previews[file.path] = preview;

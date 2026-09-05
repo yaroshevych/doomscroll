@@ -73,6 +73,10 @@
   min-height: 0;
   overflow-y: auto;
   padding: 1rem;
+  align-self: center;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--file-line-width, 700px) + 2rem);
 }
 
 .doomscroll-card {
@@ -141,6 +145,102 @@
   font-size: 0.9rem;
   line-height: 1.5;
   white-space: pre-line;
+}
+
+.doomscroll-card-snippet-markdown {
+  white-space: normal;
+  max-height: 15em;
+  overflow: hidden;
+}
+
+.doomscroll-card-snippet-markdown > :first-child,
+.doomscroll-card-snippet-simple > :first-child {
+  margin-top: 0;
+}
+
+.doomscroll-card-snippet-markdown > :last-child,
+.doomscroll-card-snippet-simple > :last-child {
+  margin-bottom: 0;
+}
+
+.doomscroll-card-snippet-markdown p,
+.doomscroll-card-snippet-markdown ul,
+.doomscroll-card-snippet-markdown ol,
+.doomscroll-card-snippet-markdown blockquote,
+.doomscroll-card-snippet-simple p,
+.doomscroll-card-snippet-simple ul,
+.doomscroll-card-snippet-simple ol,
+.doomscroll-card-snippet-simple blockquote {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.doomscroll-preview-link {
+  color: var(--link-color);
+  text-decoration: underline;
+  cursor: inherit;
+}
+
+.doomscroll-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  white-space: normal;
+}
+
+.doomscroll-preview-table th,
+.doomscroll-preview-table td {
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--background-modifier-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doomscroll-preview-code {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
+.doomscroll-simple-preview .doomscroll-simple-heading {
+  font-weight: 400;
+}
+
+.doomscroll-card-snippet-simple p,
+.doomscroll-card-snippet-simple ul,
+.doomscroll-card-snippet-simple ol,
+.doomscroll-card-snippet-simple blockquote {
+  margin-top: 0.15rem;
+  margin-bottom: 0.15rem;
+}
+
+.doomscroll-card-snippet-simple ul,
+.doomscroll-card-snippet-simple ol {
+  padding-left: 1.25rem;
+}
+
+.doomscroll-card-snippet-simple .doomscroll-preview-table {
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.doomscroll-card-snippet-simple .doomscroll-preview-table th,
+.doomscroll-card-snippet-simple .doomscroll-preview-table td {
+  padding: 0.1rem 0.25rem;
+}
+
+.doomscroll-card-snippet-simple .doomscroll-preview-code {
+  max-height: 7rem;
+  margin: 0.2rem 0;
+  line-height: 1.25;
+}
+
+.doomscroll-card-snippet-simple {
+  max-height: 12em;
+  overflow: hidden;
+  white-space: normal;
 }
 
 .doomscroll-loading {

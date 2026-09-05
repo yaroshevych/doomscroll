@@ -34,7 +34,7 @@ Same scroll. Your content.
 - Back button for the batch you should not have reshuffled
 - Filters for folders, tags, and filename patterns
 - Cover images from frontmatter, Markdown, or HTML
-- Prose previews without headings and code noise
+- Markdown previews with an optional Simplified view
 - Lazy image loading
 - Works on desktop and mobile
 - Scroll position survives switching panes
@@ -62,6 +62,8 @@ Same scroll. Your content.
 ## Settings
 
 - **Batch size** (5 to 50): How many cards to show per reshuffle (default: 20)
+- **Simplified view**: Show concise previews with readable tables, links, and
+  code; turn off for full Markdown formatting (default: on)
 - **Exclude folders**: Folder paths to skip (one per line)
 - **Exclude tags**: Tag names to skip without # (one per line)
 - **Exclude filename patterns**: Patterns to skip (one per line, e.g., `_*` for drafts)

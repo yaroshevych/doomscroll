@@ -4,6 +4,8 @@ import { DEFAULT_SETTINGS, DoomscrollSettingTab } from './settings';
 import { Indexer } from './indexer';
 import { DoomscrollView, VIEW_TYPE_DOOMSCROLL } from './view';
 
+const INDEX_FORMAT_VERSION = 2;
+
 export default class DoomscrollPlugin extends Plugin {
   data!: PluginData;
   indexer!: Indexer;
@@ -17,12 +19,13 @@ export default class DoomscrollPlugin extends Plugin {
       settings: { ...DEFAULT_SETTINGS, ...loadedData?.settings },
       previews: loadedData?.previews || {},
       history: loadedData?.history || [],
+      indexFormatVersion: loadedData?.indexFormatVersion ?? 0,
     };
 
     // Migrate: earlier versions stored path/title/ctime on each preview
     // (duplicating the map key and an unused field) and kept imagePath as
-    // an explicit null. Strip them so old vaults' data.json shrinks without
-    // a full reindex.
+    // an explicit null. Strip them so old vaults' data.json shrinks; the
+    // index-format migration below also refreshes cached metadata once.
     let migrated = false;
     type LegacyPreview = Omit<StoredNotePreview, 'imagePath'> & {
       path?: unknown;
@@ -38,13 +41,29 @@ export default class DoomscrollPlugin extends Plugin {
         'path' in preview ||
         'title' in preview ||
         'ctime' in preview ||
-        preview.imagePath === null
+        preview.imagePath === null ||
+        'snippet' in preview
       ) {
         delete preview.path;
         delete preview.title;
         delete preview.ctime;
         if (preview.imagePath === null) {
           delete preview.imagePath;
+        }
+        if ('snippet' in preview) {
+          // Legacy indexes used the snippet text to identify media-only
+          // notes. Preserve that classification until the forced rebuild
+          // below replaces the entry with the current metadata format.
+          if (
+            preview.snippet === '(no preview text)' ||
+            /^📎 .+ attached$/.test(preview.snippet ?? '')
+          ) {
+            preview.mediaOnly = true;
+          }
+          // New metadata also considers piped embeds and code blocks, so do
+          // not let an old mtime-valid entry bypass reclassification.
+          preview.mtime = 0;
+          delete preview.snippet;
         }
         migrated = true;
       }
@@ -62,6 +81,21 @@ export default class DoomscrollPlugin extends Plugin {
       JSON.stringify(this.data.settings.excludeFolders)
     ) {
       this.data.settings.excludeFolders = normalizedExcludedFolders;
+      migrated = true;
+    }
+
+    if (!loadedData?.settings || !('simplifiedView' in loadedData.settings)) {
+      migrated = true;
+    }
+
+    if (this.data.indexFormatVersion !== INDEX_FORMAT_VERSION) {
+      // Rebuild all cached metadata once. This also repairs data written by
+      // the intermediate on-demand-preview migration, which removed legacy
+      // snippets before mediaOnly classification was persisted.
+      for (const preview of Object.values(this.data.previews)) {
+        preview.mtime = 0;
+      }
+      this.data.indexFormatVersion = INDEX_FORMAT_VERSION;
       migrated = true;
     }
 
