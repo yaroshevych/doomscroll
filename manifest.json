@@ -1,7 +1,7 @@
 {
   "id": "doomscroll",
   "name": "Doomscroll",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "minAppVersion": "1.7.2",
   "description": "Doomscroll your own notes, not someone else's feed.",
   "author": "yaroshevych",
