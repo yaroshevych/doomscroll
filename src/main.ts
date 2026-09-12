@@ -1,5 +1,5 @@
 import { Plugin, normalizePath } from 'obsidian';
-import { PluginData, StoredNotePreview } from './types';
+import { isPreviewSize, PluginData, StoredNotePreview } from './types';
 import { DEFAULT_SETTINGS, DoomscrollSettingTab } from './settings';
 import { Indexer } from './indexer';
 import { DoomscrollView, VIEW_TYPE_DOOMSCROLL } from './view';
@@ -85,6 +85,11 @@ export default class DoomscrollPlugin extends Plugin {
     }
 
     if (!loadedData?.settings || !('simplifiedView' in loadedData.settings)) {
+      migrated = true;
+    }
+
+    if (!isPreviewSize(this.data.settings.previewSize)) {
+      this.data.settings.previewSize = 'medium';
       migrated = true;
     }
 

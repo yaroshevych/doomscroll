@@ -1,14 +1,24 @@
 export type OpenNoteBehavior = 'tab' | 'reuse' | 'window';
+export type PreviewSize = 'small' | 'medium' | 'large';
 
 export interface PluginSettings {
   batchSize: number;
   includeMediaOnlyNotes: boolean;
   simplifiedView: boolean;
+  previewSize: PreviewSize;
   openNoteBehavior: OpenNoteBehavior;
   excludeFolders: string[];
   excludeTags: string[];
   excludeGlobs: string[];
   frontmatterImageProps: string[];
+}
+
+export function isPreviewSize(value: unknown): value is PreviewSize {
+  return (
+    value === 'small' ||
+    value === 'medium' ||
+    value === 'large'
+  );
 }
 
 // Persisted per note. path/title are omitted — path is the map key in

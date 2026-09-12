@@ -251,6 +251,21 @@
   line-clamp: 8;
 }
 
+.doomscroll-card-snippet-size-small {
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.doomscroll-card-snippet-markdown.doomscroll-card-snippet-size-large {
+  -webkit-line-clamp: 15;
+  line-clamp: 15;
+}
+
+.doomscroll-card-snippet-simple.doomscroll-card-snippet-size-large {
+  -webkit-line-clamp: 12;
+  line-clamp: 12;
+}
+
 .doomscroll-loading {
   text-align: center;
   padding: 2rem;

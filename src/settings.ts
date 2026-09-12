@@ -7,7 +7,7 @@ import {
   Setting,
 } from 'obsidian';
 import DoomscrollPlugin from './main';
-import { PluginSettings } from './types';
+import { isPreviewSize, PluginSettings } from './types';
 
 const GITHUB_URL = 'https://github.com/yaroshevych/doomscroll';
 const ISSUES_URL = `${GITHUB_URL}/issues`;
@@ -52,6 +52,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   batchSize: 20,
   includeMediaOnlyNotes: true,
   simplifiedView: true,
+  previewSize: 'medium',
   openNoteBehavior: 'tab',
   excludeFolders: [],
   excludeTags: [],
@@ -108,6 +109,24 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.simplifiedView !== false)
           .onChange(async (value) => {
             this.plugin.data.settings.simplifiedView = value;
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Preview size')
+      .setDesc('How many lines of note text to show on each card')
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            small: 'Small',
+            medium: 'Medium',
+            large: 'Large',
+          })
+          .setValue(this.plugin.data.settings.previewSize)
+          .onChange(async (value) => {
+            if (!isPreviewSize(value)) return;
+            this.plugin.data.settings.previewSize = value;
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );

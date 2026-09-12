@@ -8,7 +8,12 @@ import {
 } from 'obsidian';
 import DoomscrollPlugin from './main';
 import { preparePreviewMarkdown, prepareRenderedPreview } from './extract';
-import { NotePreview, toNotePreview } from './types';
+import {
+  isPreviewSize,
+  NotePreview,
+  PreviewSize,
+  toNotePreview,
+} from './types';
 import { selectBatch } from './selector';
 import { recordView } from './history';
 
@@ -69,6 +74,7 @@ export class DoomscrollView extends ItemView {
   private restoredScrollTop = 0;
   private renderedSnippetCache = new Map<string, HTMLElement>();
   private renderedSimplifiedView: boolean | null = null;
+  private renderedPreviewSize: PreviewSize | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
     super(leaf);
@@ -165,7 +171,12 @@ export class DoomscrollView extends ItemView {
       this.batchSettingsKey !== this.getBatchSettingsKey();
     const previewModeChanged =
       this.renderedSimplifiedView !== this.isSimplifiedView();
-    if (!refreshFailed && (indexRefreshed || settingsChanged || previewModeChanged)) {
+    const previewSizeChanged =
+      this.renderedPreviewSize !== this.getPreviewSize();
+    if (
+      !refreshFailed &&
+      (indexRefreshed || settingsChanged || previewModeChanged || previewSizeChanged)
+    ) {
       if (indexRefreshed || settingsChanged) {
         this.currentBatch = [];
       }
@@ -174,8 +185,11 @@ export class DoomscrollView extends ItemView {
         this.batchHistoryCursor = -1;
       } else if (indexRefreshed) {
         this.revalidateBatchHistory();
-      } else if (previewModeChanged) {
-        this.renderedSnippetCache.clear();
+      } else if (previewModeChanged || previewSizeChanged) {
+        if (previewModeChanged) {
+          this.renderedSnippetCache.clear();
+        }
+        clearCardSizeCache();
       }
 
       if (this.hasRendered) {
@@ -369,6 +383,7 @@ export class DoomscrollView extends ItemView {
     }
 
     this.renderedSimplifiedView = this.isSimplifiedView();
+    this.renderedPreviewSize = this.getPreviewSize();
     this.updateBackButton();
 
     // Stop observing cards from the previous batch before replacing them.
@@ -547,14 +562,34 @@ export class DoomscrollView extends ItemView {
   }
 
   private getBatchSettingsKey(): string {
-    const { simplifiedView: _simplifiedView, ...batchSettings } =
-      this.plugin.data.settings;
+    const {
+      simplifiedView: _simplifiedView,
+      previewSize: _previewSize,
+      ...batchSettings
+    } = this.plugin.data.settings;
     return JSON.stringify(batchSettings);
   }
 
   private isSimplifiedView(): boolean {
     // Treat missing values from pre-setting data.json files as the default.
     return this.plugin.data.settings.simplifiedView !== false;
+  }
+
+  private getPreviewSize(): PreviewSize {
+    return isPreviewSize(this.plugin.data.settings.previewSize)
+      ? this.plugin.data.settings.previewSize
+      : 'medium';
+  }
+
+  private setSnippetPreviewSize(snippetEl: HTMLElement): void {
+    snippetEl.classList.remove(
+      'doomscroll-card-snippet-size-small',
+      'doomscroll-card-snippet-size-medium',
+      'doomscroll-card-snippet-size-large'
+    );
+    snippetEl.classList.add(
+      `doomscroll-card-snippet-size-${this.getPreviewSize()}`
+    );
   }
 
   private setSnippetContent(
@@ -565,6 +600,7 @@ export class DoomscrollView extends ItemView {
     snippetEl.classList.toggle('doomscroll-card-snippet-simple', simplified);
     snippetEl.classList.toggle('doomscroll-card-snippet-markdown', !simplified);
     snippetEl.classList.toggle('markdown-rendered', !simplified);
+    this.setSnippetPreviewSize(snippetEl);
 
     const clone = renderedRoot.cloneNode(true) as HTMLElement;
     if (clone.childNodes.length === 0) {
@@ -592,7 +628,7 @@ export class DoomscrollView extends ItemView {
   ): HTMLElement {
     const card = container.createDiv('doomscroll-card');
     card.dataset.path = preview.path;
-    applyCachedCardSize(card, this.isSimplifiedView());
+    applyCachedCardSize(card, this.isSimplifiedView(), this.getPreviewSize());
 
     // Title + date row
     const titleRow = card.createDiv('doomscroll-card-titlerow');
@@ -633,6 +669,7 @@ export class DoomscrollView extends ItemView {
 
     // Snippet is rendered on demand from a bounded Markdown fragment.
     const snippetEl = card.createDiv('doomscroll-card-snippet');
+    this.setSnippetPreviewSize(snippetEl);
     snippetEl.textContent = 'Loading preview…';
 
     // Click handler
@@ -854,7 +891,7 @@ export class DoomscrollView extends ItemView {
   private cacheCardSize(card: Element | null): void {
     if (!(card instanceof HTMLElement)) return;
 
-    rememberCardSize(card, this.isSimplifiedView());
+    rememberCardSize(card, this.isSimplifiedView(), this.getPreviewSize());
   }
 }
 
@@ -877,24 +914,38 @@ function applyImageDimensions(
 function getCardSizeCacheKey(
   path: string,
   simplified: boolean,
+  previewSize: PreviewSize,
   width: number
 ): string {
-  return `${path}\u0000${simplified ? 'simplified' : 'markdown'}\u0000${width}`;
+  return `${path}\u0000${simplified ? 'simplified' : 'markdown'}\u0000${previewSize}\u0000${width}`;
 }
 
-function applyCachedCardSize(card: HTMLElement, simplified: boolean): void {
+function applyCachedCardSize(
+  card: HTMLElement,
+  simplified: boolean,
+  previewSize: PreviewSize
+): void {
   const width = Math.round(card.getBoundingClientRect().width);
   if (width <= 0) return;
 
   const cached = cardSizeCache.get(
-    getCardSizeCacheKey(card.dataset.path ?? '', simplified, width)
+    getCardSizeCacheKey(
+      card.dataset.path ?? '',
+      simplified,
+      previewSize,
+      width
+    )
   );
   if (cached) {
     card.style.minHeight = `${cached.height}px`;
   }
 }
 
-function rememberCardSize(card: HTMLElement, simplified: boolean): void {
+function rememberCardSize(
+  card: HTMLElement,
+  simplified: boolean,
+  previewSize: PreviewSize
+): void {
   window.requestAnimationFrame(() => {
     if (!card.isConnected) return;
 
@@ -909,7 +960,7 @@ function rememberCardSize(card: HTMLElement, simplified: boolean): void {
     const width = Math.round(rect.width);
     if (!path || width <= 0 || rect.height <= 0) return;
 
-    const key = getCardSizeCacheKey(path, simplified, width);
+    const key = getCardSizeCacheKey(path, simplified, previewSize, width);
     cardSizeCache.delete(key);
     cardSizeCache.set(key, { height: rect.height });
     while (cardSizeCache.size > MAX_CARD_SIZE_CACHE_ENTRIES) {
@@ -932,6 +983,10 @@ function invalidateCardSizeCache(path: string): void {
 
 function invalidateImageCaches(): void {
   imageDimensionCache.clear();
+  cardSizeCache.clear();
+}
+
+function clearCardSizeCache(): void {
   cardSizeCache.clear();
 }
 
