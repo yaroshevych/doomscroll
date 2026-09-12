@@ -57,6 +57,13 @@ export class DoomscrollView extends ItemView {
     super(leaf);
     this.plugin = plugin;
     this.containerEl = this.contentEl;
+    this.registerEvent(
+      this.plugin.app.vault.on('modify', (file) => {
+        if (file instanceof TFile) {
+          void this.refreshModifiedCard(file);
+        }
+      })
+    );
   }
 
   getViewType(): string {
@@ -649,6 +656,35 @@ export class DoomscrollView extends ItemView {
         snippetEl.textContent = preview.snippet ?? '(no preview text)';
       }
     }
+  }
+
+  private async refreshModifiedCard(file: TFile): Promise<void> {
+    const preview = this.currentBatch.find(
+      (candidate) => candidate.path === file.path
+    );
+    if (!preview) return;
+
+    const card = Array.from(
+      this.containerEl.querySelectorAll<HTMLElement>('.doomscroll-card')
+    ).find((candidate) => candidate.dataset.path === file.path);
+    if (!card) return;
+
+    preview.mtime = file.stat.mtime;
+    const dateEl = card.querySelector('.doomscroll-card-date');
+    if (dateEl instanceof HTMLElement) {
+      dateEl.textContent = new Date(file.stat.mtime).toLocaleDateString();
+    }
+
+    const snippetEl = card.querySelector('.doomscroll-card-snippet');
+    if (!(snippetEl instanceof HTMLElement)) return;
+
+    for (const key of this.renderedSnippetCache.keys()) {
+      if (key.includes(`:${file.path}:`)) {
+        this.renderedSnippetCache.delete(key);
+      }
+    }
+
+    await this.renderSnippet(preview, snippetEl);
   }
 
   private async openPreview(preview: NotePreview): Promise<void> {
