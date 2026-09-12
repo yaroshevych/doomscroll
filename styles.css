@@ -149,8 +149,11 @@
 
 .doomscroll-card-snippet-markdown {
   white-space: normal;
-  max-height: 15em;
   overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 10;
+  line-clamp: 10;
 }
 
 .doomscroll-card-snippet-markdown > :first-child,
@@ -238,9 +241,12 @@
 }
 
 .doomscroll-card-snippet-simple {
-  max-height: 12em;
   overflow: hidden;
   white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
+  line-clamp: 8;
 }
 
 .doomscroll-loading {
