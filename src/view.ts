@@ -16,6 +16,24 @@ export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view';
 const HISTORY_SAVE_DELAY_MS = 2_000;
 const MAX_BATCH_HISTORY = 20;
 const MAX_RENDERED_SNIPPET_CACHE_ENTRIES = 100;
+const MAX_IMAGE_DIMENSION_CACHE_ENTRIES = 200;
+const MAX_CARD_SIZE_CACHE_ENTRIES = 200;
+const IMAGE_FILE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp)$/i;
+
+interface ImageDimensions {
+  width: number;
+  height: number;
+}
+
+interface CardSize {
+  height: number;
+}
+
+// Keep dimensions across Doomscroll view instances while the plugin is
+// loaded. This lets a feed recreated by tab history reserve image space
+// before lazy loading runs again.
+const imageDimensionCache = new Map<string, ImageDimensions>();
+const cardSizeCache = new Map<string, CardSize>();
 
 interface AppWithSettings {
   setting: {
@@ -45,7 +63,6 @@ export class DoomscrollView extends ItemView {
   private refreshStatusEl: HTMLElement | null = null;
   private isRefreshing = false;
   private pendingSettingsRefresh = false;
-  private freshIndexLoaded = false;
   private batchSettingsKey: string | null = null;
   private historySaveTimer: number | null = null;
   private historySavePending = false;
@@ -60,6 +77,9 @@ export class DoomscrollView extends ItemView {
     this.registerEvent(
       this.plugin.app.vault.on('modify', (file) => {
         if (file instanceof TFile) {
+          if (IMAGE_FILE_EXT_RE.test(file.path)) {
+            invalidateImageCaches();
+          }
           void this.refreshModifiedCard(file);
         }
       })
@@ -94,10 +114,6 @@ export class DoomscrollView extends ItemView {
   }
 
   async setState(state: unknown): Promise<void> {
-    // The first index refresh is authoritative for this view session. Ignore
-    // a late workspace restore so it cannot put an old batch back on screen.
-    if (this.freshIndexLoaded) return;
-
     const restored = parseViewState(state);
     if (!restored) return;
 
@@ -111,6 +127,7 @@ export class DoomscrollView extends ItemView {
       this.batchHistory.length - 1
     );
     this.restoredScrollTop = restored.scrollTop;
+    this.batchSettingsKey = this.getBatchSettingsKey();
 
     if (this.hasRendered) {
       this.renderBatch();
@@ -265,13 +282,21 @@ export class DoomscrollView extends ItemView {
     }
 
     // A restored batch was built from the previous session's index and may
-    // contain notes excluded by the current settings.
+    // contain notes excluded by the current settings. Keep it when the index
+    // check was a no-op so returning from a note preserves the same feed.
     if (indexRefreshSucceeded) {
-      this.freshIndexLoaded = true;
-      this.currentBatch = [];
-      this.batchHistory = [];
-      this.batchHistoryCursor = -1;
-      this.batchSettingsKey = null;
+      if (indexRefreshed) {
+        if (this.currentBatch.length > 0) {
+          this.currentBatch = this.resolvePreviewPaths(
+            this.currentBatch.map((preview) => preview.path)
+          );
+          this.revalidateBatchHistory();
+        } else {
+          this.batchHistory = [];
+          this.batchHistoryCursor = -1;
+          this.batchSettingsKey = null;
+        }
+      }
     }
     loadingEl?.remove();
 
@@ -567,6 +592,7 @@ export class DoomscrollView extends ItemView {
   ): HTMLElement {
     const card = container.createDiv('doomscroll-card');
     card.dataset.path = preview.path;
+    applyCachedCardSize(card, this.isSimplifiedView());
 
     // Title + date row
     const titleRow = card.createDiv('doomscroll-card-titlerow');
@@ -591,8 +617,18 @@ export class DoomscrollView extends ItemView {
       img.dataset.notePath = preview.path;
       img.alt = preview.title;
 
+      const imageDimensions = imageDimensionCache.get(
+        getImageDimensionCacheKey(preview)
+      );
+      if (imageDimensions) {
+        applyImageDimensions(img, imageDimensions);
+      }
+
       // Setup lazy loading via IntersectionObserver
-      this.setupImageLazyLoad(img);
+      this.setupImageLazyLoad(
+        img,
+        getImageDimensionCacheKey(preview)
+      );
     }
 
     // Snippet is rendered on demand from a bounded Markdown fragment.
@@ -624,6 +660,7 @@ export class DoomscrollView extends ItemView {
     if (cached !== undefined) {
       this.cacheRenderedSnippet(cacheKey, cached);
       this.setSnippetContent(snippetEl, cached, simplified);
+      this.cacheCardSize(snippetEl.closest('.doomscroll-card'));
       return;
     }
 
@@ -649,6 +686,7 @@ export class DoomscrollView extends ItemView {
       this.cacheRenderedSnippet(cacheKey, prepared);
       if (snippetEl.isConnected) {
         this.setSnippetContent(snippetEl, prepared, simplified);
+        this.cacheCardSize(snippetEl.closest('.doomscroll-card'));
       }
     } catch (error) {
       console.error(`Error rendering preview for ${file.path}:`, error);
@@ -677,6 +715,9 @@ export class DoomscrollView extends ItemView {
 
     const snippetEl = card.querySelector('.doomscroll-card-snippet');
     if (!(snippetEl instanceof HTMLElement)) return;
+
+    invalidateCardSizeCache(file.path);
+    card.style.removeProperty('min-height');
 
     for (const key of this.renderedSnippetCache.keys()) {
       if (key.includes(`:${file.path}:`)) {
@@ -711,7 +752,28 @@ export class DoomscrollView extends ItemView {
     }
   }
 
-  private setupImageLazyLoad(img: HTMLImageElement): void {
+  private setupImageLazyLoad(
+    img: HTMLImageElement,
+    imageDimensionCacheKey: string
+  ): void {
+    img.addEventListener('load', () => {
+      if (img.naturalWidth <= 0 || img.naturalHeight <= 0) return;
+
+      const dimensions = {
+        width: img.naturalWidth,
+        height: img.naturalHeight,
+      };
+      imageDimensionCache.delete(imageDimensionCacheKey);
+      imageDimensionCache.set(imageDimensionCacheKey, dimensions);
+      while (imageDimensionCache.size > MAX_IMAGE_DIMENSION_CACHE_ENTRIES) {
+        const oldestKey = imageDimensionCache.keys().next().value;
+        if (typeof oldestKey !== 'string') break;
+        imageDimensionCache.delete(oldestKey);
+      }
+      applyImageDimensions(img, dimensions);
+      this.cacheCardSize(img.closest('.doomscroll-card'));
+    });
+
     if (!this.imageObserver) {
       this.imageObserver = new IntersectionObserver(
         (entries) => {
@@ -788,6 +850,89 @@ export class DoomscrollView extends ItemView {
     }
     await this.flushHistorySave();
   }
+
+  private cacheCardSize(card: Element | null): void {
+    if (!(card instanceof HTMLElement)) return;
+
+    rememberCardSize(card, this.isSimplifiedView());
+  }
+}
+
+function getImageDimensionCacheKey(preview: NotePreview): string {
+  return `${preview.path}\u0000${preview.imagePath ?? ''}`;
+}
+
+function applyImageDimensions(
+  img: HTMLImageElement,
+  dimensions: ImageDimensions
+): void {
+  img.width = dimensions.width;
+  img.height = dimensions.height;
+  img.parentElement?.style.setProperty(
+    'aspect-ratio',
+    `${dimensions.width} / ${dimensions.height}`
+  );
+}
+
+function getCardSizeCacheKey(
+  path: string,
+  simplified: boolean,
+  width: number
+): string {
+  return `${path}\u0000${simplified ? 'simplified' : 'markdown'}\u0000${width}`;
+}
+
+function applyCachedCardSize(card: HTMLElement, simplified: boolean): void {
+  const width = Math.round(card.getBoundingClientRect().width);
+  if (width <= 0) return;
+
+  const cached = cardSizeCache.get(
+    getCardSizeCacheKey(card.dataset.path ?? '', simplified, width)
+  );
+  if (cached) {
+    card.style.minHeight = `${cached.height}px`;
+  }
+}
+
+function rememberCardSize(card: HTMLElement, simplified: boolean): void {
+  window.requestAnimationFrame(() => {
+    if (!card.isConnected) return;
+
+    // Remove the reservation while measuring so a changed note can shrink as
+    // well as grow after its new preview has rendered.
+    const previousMinHeight = card.style.minHeight;
+    card.style.removeProperty('min-height');
+    const rect = card.getBoundingClientRect();
+    card.style.minHeight = previousMinHeight;
+
+    const path = card.dataset.path;
+    const width = Math.round(rect.width);
+    if (!path || width <= 0 || rect.height <= 0) return;
+
+    const key = getCardSizeCacheKey(path, simplified, width);
+    cardSizeCache.delete(key);
+    cardSizeCache.set(key, { height: rect.height });
+    while (cardSizeCache.size > MAX_CARD_SIZE_CACHE_ENTRIES) {
+      const oldestKey = cardSizeCache.keys().next().value;
+      if (typeof oldestKey !== 'string') break;
+      cardSizeCache.delete(oldestKey);
+    }
+    card.style.minHeight = `${rect.height}px`;
+  });
+}
+
+function invalidateCardSizeCache(path: string): void {
+  const prefix = `${path}\u0000`;
+  for (const key of cardSizeCache.keys()) {
+    if (key.startsWith(prefix)) {
+      cardSizeCache.delete(key);
+    }
+  }
+}
+
+function invalidateImageCaches(): void {
+  imageDimensionCache.clear();
+  cardSizeCache.clear();
 }
 
 function hasSameOrder(
