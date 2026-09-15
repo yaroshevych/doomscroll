@@ -10,6 +10,7 @@ export interface PluginSettings {
   excludeFolders: string[];
   excludeTags: string[];
   excludeGlobs: string[];
+  searchQuery: string;
   frontmatterImageProps: string[];
 }
 

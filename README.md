@@ -69,6 +69,7 @@ Same scroll. Your content.
 - **Exclude folders**: Folder paths to skip (one per line)
 - **Exclude tags**: Tag names to skip without # (one per line)
 - **Exclude filename patterns**: Patterns to skip (one per line, e.g., `_*` for drafts)
+- **Search query**: Filter notes with Obsidian-style search syntax, such as `tag:#work` or `[status:Draft]`
 - **Frontmatter image properties**: Property names to check for images (default: `cover`, `image`, `banner`)
 
 ## Usage

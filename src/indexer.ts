@@ -6,6 +6,7 @@ import {
   hasTextualPreviewContent,
 } from './extract';
 import { compileGlob } from './glob';
+import { matchesSearchQuery } from './search';
 
 const INDEX_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -61,6 +62,7 @@ export class Indexer {
       excludeFolders: this.data.settings.excludeFolders,
       excludeTags: this.data.settings.excludeTags,
       excludeGlobs: this.data.settings.excludeGlobs,
+      searchQuery: this.data.settings.searchQuery,
       frontmatterImageProps: this.data.settings.frontmatterImageProps,
     });
   }
@@ -168,6 +170,8 @@ export class Indexer {
   ): Promise<void> {
     const candidates = this.getCandidateFiles();
     const total = candidates.length;
+    const searchQuery = this.data.settings.searchQuery.trim();
+    const matchedCandidatePaths = new Set<string>();
 
     // Keep reads parallel but bounded for mobile devices and large notes.
     const chunkSize = 8;
@@ -177,6 +181,25 @@ export class Indexer {
 
       await Promise.all(
         chunk.map(async (file) => {
+          let content: string | null = null;
+          let fileCache = this.app.metadataCache.getFileCache(file);
+
+          if (searchQuery) {
+            content = await this.app.vault.cachedRead(file);
+            const frontmatter = isRecord(fileCache?.frontmatter)
+              ? fileCache.frontmatter
+              : undefined;
+            if (!matchesSearchQuery(searchQuery, {
+              path: file.path,
+              content,
+              frontmatter,
+            })) {
+              return;
+            }
+          }
+
+          matchedCandidatePaths.add(file.path);
+
           // Check if cached preview is still valid
           if (this.data.previews[file.path]?.mtime === file.stat.mtime) {
             // Reuse cached preview
@@ -184,8 +207,8 @@ export class Indexer {
           }
 
           // Build new preview
-          const content = await this.app.vault.cachedRead(file);
-          const fileCache = this.app.metadataCache.getFileCache(file);
+          content ??= await this.app.vault.cachedRead(file);
+          fileCache ??= this.app.metadataCache.getFileCache(file);
           const rawFrontmatter: unknown = fileCache?.frontmatter;
           const frontmatter = isRecord(rawFrontmatter)
             ? rawFrontmatter
@@ -219,7 +242,7 @@ export class Indexer {
     }
 
     // Remove stale entries
-    const candidatePaths = new Set(candidates.map((f) => f.path));
+    const candidatePaths = matchedCandidatePaths;
     const previewKeys = Object.keys(this.data.previews);
 
     for (const path of previewKeys) {

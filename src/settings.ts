@@ -57,6 +57,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   excludeFolders: [],
   excludeTags: [],
   excludeGlobs: [],
+  searchQuery: '',
   frontmatterImageProps: ['cover', 'image', 'banner'],
 };
 
@@ -127,6 +128,21 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             if (!isPreviewSize(value)) return;
             this.plugin.data.settings.previewSize = value;
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Search query')
+      .setDesc(
+        'Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]'
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder('tag:#work [status:Draft]')
+          .setValue(this.plugin.data.settings.searchQuery)
+          .onChange(async (value) => {
+            this.plugin.data.settings.searchQuery = value;
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );
