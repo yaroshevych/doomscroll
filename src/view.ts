@@ -16,6 +16,7 @@ import {
 } from './types';
 import { selectBatch } from './selector';
 import { recordView } from './history';
+import { removePathFromBatches } from './batches';
 
 export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view';
 const HISTORY_SAVE_DELAY_MS = 2_000;
@@ -88,6 +89,11 @@ export class DoomscrollView extends ItemView {
           }
           void this.refreshModifiedCard(file);
         }
+      })
+    );
+    this.registerEvent(
+      this.plugin.app.vault.on('delete', (file) => {
+        void this.removeDeletedNote(file.path);
       })
     );
   }
@@ -765,6 +771,52 @@ export class DoomscrollView extends ItemView {
     await this.renderSnippet(preview, snippetEl);
   }
 
+  private async removeDeletedNote(path: string): Promise<void> {
+    const card = Array.from(
+      this.containerEl.querySelectorAll<HTMLElement>('.doomscroll-card')
+    ).find((candidate) => candidate.dataset.path === path);
+
+    const hadPreview = path in this.plugin.data.previews;
+    const hadHistory = this.plugin.data.history.some(
+      (entry) => entry.path === path
+    );
+    if (!card && !hadPreview && !hadHistory) return;
+
+    if (card) {
+      this.cardObserver?.unobserve(card);
+      card.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
+        this.imageObserver?.unobserve(image);
+      });
+      card.remove();
+    }
+
+    const nextBatches = removePathFromBatches(
+      this.currentBatch,
+      this.batchHistory,
+      this.batchHistoryCursor,
+      path
+    );
+    this.currentBatch = nextBatches.currentBatch;
+    this.batchHistory = nextBatches.batchHistory;
+    this.batchHistoryCursor = nextBatches.batchHistoryCursor;
+    this.viewedPathsInBatch.delete(path);
+
+    delete this.plugin.data.previews[path];
+    this.plugin.data.history = this.plugin.data.history.filter(
+      (entry) => entry.path !== path
+    );
+    invalidateNoteCaches(path);
+
+    for (const key of this.renderedSnippetCache.keys()) {
+      if (key.includes(`:${path}:`)) {
+        this.renderedSnippetCache.delete(key);
+      }
+    }
+
+    this.updateBackButton();
+    await this.plugin.saveSettings();
+  }
+
   private async openPreview(preview: NotePreview): Promise<void> {
     const file = this.plugin.app.vault.getAbstractFileByPath(preview.path);
 
@@ -979,6 +1031,16 @@ function invalidateCardSizeCache(path: string): void {
       cardSizeCache.delete(key);
     }
   }
+}
+
+function invalidateNoteCaches(path: string): void {
+  const imagePrefix = `${path}\u0000`;
+  for (const key of imageDimensionCache.keys()) {
+    if (key.startsWith(imagePrefix)) {
+      imageDimensionCache.delete(key);
+    }
+  }
+  invalidateCardSizeCache(path);
 }
 
 function invalidateImageCaches(): void {
