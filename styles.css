@@ -149,6 +149,43 @@
   white-space: pre-line;
 }
 
+.doomscroll-card-frontmatter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.doomscroll-card-frontmatter-before {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding-top: 0;
+  padding-bottom: 0.75rem;
+  border-top: 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.doomscroll-card-frontmatter-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.doomscroll-card-frontmatter-property {
+  font-weight: 600;
+}
+
+.doomscroll-card-frontmatter-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .doomscroll-card-snippet-markdown {
   white-space: normal;
   overflow: hidden;

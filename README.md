@@ -71,6 +71,8 @@ Same scroll. Your content.
 - **Exclude filename patterns**: Patterns to skip (one per line, e.g., `_*` for drafts)
 - **Search query**: Filter notes with Obsidian-style search syntax, such as `tag:#work` or `[status:Draft]`
 - **Frontmatter image properties**: Property names to check for images (default: `cover`, `image`, `banner`)
+- **Frontmatter properties before preview**: Property names to render before the note body (one per line)
+- **Frontmatter properties after preview**: Property names to render after the note body (one per line)
 
 ## Usage
 

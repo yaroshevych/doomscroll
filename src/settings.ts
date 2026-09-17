@@ -59,6 +59,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   excludeGlobs: [],
   searchQuery: '',
   frontmatterImageProps: ['cover', 'image', 'banner'],
+  frontmatterBeforeProps: [],
+  frontmatterAfterProps: [],
 };
 
 export class DoomscrollSettingTab extends PluginSettingTab {
@@ -201,6 +203,40 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.frontmatterImageProps.join('\n'))
           .onChange(async (value) => {
             this.plugin.data.settings.frontmatterImageProps = parseLines(value);
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Frontmatter properties before preview')
+      .setDesc(
+        'Property names to render before the note body (one per line)'
+      )
+      .addTextArea((text) =>
+        text
+          .setPlaceholder('title\nsource\nauthor')
+          .setValue(
+            this.plugin.data.settings.frontmatterBeforeProps.join('\n')
+          )
+          .onChange(async (value) => {
+            this.plugin.data.settings.frontmatterBeforeProps = parseLines(value);
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Frontmatter properties after preview')
+      .setDesc(
+        'Property names to render after the note body (one per line)'
+      )
+      .addTextArea((text) =>
+        text
+          .setPlaceholder('source\nauthor\npublished')
+          .setValue(
+            this.plugin.data.settings.frontmatterAfterProps.join('\n')
+          )
+          .onChange(async (value) => {
+            this.plugin.data.settings.frontmatterAfterProps = parseLines(value);
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );

@@ -12,6 +12,8 @@ export interface PluginSettings {
   excludeGlobs: string[];
   searchQuery: string;
   frontmatterImageProps: string[];
+  frontmatterBeforeProps: string[];
+  frontmatterAfterProps: string[];
 }
 
 export function isPreviewSize(value: unknown): value is PreviewSize {

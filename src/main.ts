@@ -15,8 +15,33 @@ export default class DoomscrollPlugin extends Plugin {
     // Load data
     const loadedData = (await this.loadData()) as PluginData | null;
 
+    type LegacySettings = PluginData['settings'] & {
+      frontmatterDisplayProps?: unknown;
+    };
+    const loadedSettings = loadedData?.settings as LegacySettings | undefined;
+    const legacyDisplayProps = Array.isArray(
+      loadedSettings?.frontmatterDisplayProps
+    )
+      ? loadedSettings.frontmatterDisplayProps.filter(
+          (property): property is string => typeof property === 'string'
+        )
+      : [];
+    const hasBeforeProps = Array.isArray(loadedSettings?.frontmatterBeforeProps);
+    const hasAfterProps = Array.isArray(loadedSettings?.frontmatterAfterProps);
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      ...loadedSettings,
+      frontmatterBeforeProps: hasBeforeProps
+        ? loadedSettings?.frontmatterBeforeProps ?? []
+        : [],
+      frontmatterAfterProps: hasAfterProps
+        ? loadedSettings?.frontmatterAfterProps ?? []
+        : legacyDisplayProps,
+    };
+    delete (settings as LegacySettings).frontmatterDisplayProps;
+
     this.data = {
-      settings: { ...DEFAULT_SETTINGS, ...loadedData?.settings },
+      settings,
       previews: loadedData?.previews || {},
       history: loadedData?.history || [],
       indexFormatVersion: loadedData?.indexFormatVersion ?? 0,
@@ -26,7 +51,13 @@ export default class DoomscrollPlugin extends Plugin {
     // (duplicating the map key and an unused field) and kept imagePath as
     // an explicit null. Strip them so old vaults' data.json shrinks; the
     // index-format migration below also refreshes cached metadata once.
-    let migrated = false;
+    let migrated =
+      loadedData?.settings !== undefined &&
+      (!hasBeforeProps ||
+        !hasAfterProps ||
+        Boolean(
+          loadedSettings && 'frontmatterDisplayProps' in loadedSettings
+        ));
     type LegacyPreview = Omit<StoredNotePreview, 'imagePath'> & {
       path?: unknown;
       title?: unknown;

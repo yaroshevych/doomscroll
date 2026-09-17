@@ -76,6 +76,7 @@ export class DoomscrollView extends ItemView {
   private renderedSnippetCache = new Map<string, HTMLElement>();
   private renderedSimplifiedView: boolean | null = null;
   private renderedPreviewSize: PreviewSize | null = null;
+  private renderedFrontmatterPropertiesKey: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
     super(leaf);
@@ -87,8 +88,12 @@ export class DoomscrollView extends ItemView {
           if (IMAGE_FILE_EXT_RE.test(file.path)) {
             invalidateImageCaches();
           }
-          void this.refreshModifiedCard(file);
         }
+      })
+    );
+    this.registerEvent(
+      this.plugin.app.metadataCache.on('changed', (file) => {
+        void this.refreshModifiedCard(file);
       })
     );
     this.registerEvent(
@@ -179,9 +184,16 @@ export class DoomscrollView extends ItemView {
       this.renderedSimplifiedView !== this.isSimplifiedView();
     const previewSizeChanged =
       this.renderedPreviewSize !== this.getPreviewSize();
+    const frontmatterPropertiesChanged =
+      this.renderedFrontmatterPropertiesKey !==
+      this.getFrontmatterPropertiesKey();
     if (
       !refreshFailed &&
-      (indexRefreshed || settingsChanged || previewModeChanged || previewSizeChanged)
+      (indexRefreshed ||
+        settingsChanged ||
+        previewModeChanged ||
+        previewSizeChanged ||
+        frontmatterPropertiesChanged)
     ) {
       if (indexRefreshed || settingsChanged) {
         this.currentBatch = [];
@@ -390,6 +402,7 @@ export class DoomscrollView extends ItemView {
 
     this.renderedSimplifiedView = this.isSimplifiedView();
     this.renderedPreviewSize = this.getPreviewSize();
+    this.renderedFrontmatterPropertiesKey = this.getFrontmatterPropertiesKey();
     this.updateBackButton();
 
     // Stop observing cards from the previous batch before replacing them.
@@ -571,9 +584,18 @@ export class DoomscrollView extends ItemView {
     const {
       simplifiedView: _simplifiedView,
       previewSize: _previewSize,
+      frontmatterBeforeProps: _frontmatterBeforeProps,
+      frontmatterAfterProps: _frontmatterAfterProps,
       ...batchSettings
     } = this.plugin.data.settings;
     return JSON.stringify(batchSettings);
+  }
+
+  private getFrontmatterPropertiesKey(): string {
+    return JSON.stringify({
+      before: this.plugin.data.settings.frontmatterBeforeProps ?? [],
+      after: this.plugin.data.settings.frontmatterAfterProps ?? [],
+    });
   }
 
   private isSimplifiedView(): boolean {
@@ -677,6 +699,8 @@ export class DoomscrollView extends ItemView {
     const snippetEl = card.createDiv('doomscroll-card-snippet');
     this.setSnippetPreviewSize(snippetEl);
     snippetEl.textContent = 'Loading preview…';
+    this.renderCardFrontmatter(card, preview, 'before');
+    this.renderCardFrontmatter(card, preview, 'after');
 
     // Click handler
     card.addEventListener('click', () => {
@@ -685,6 +709,37 @@ export class DoomscrollView extends ItemView {
     });
 
     return card;
+  }
+
+  private renderFrontmatterProperties(
+    preview: NotePreview,
+    container: HTMLElement,
+    properties: string[]
+  ): void {
+    if (properties.length === 0) return;
+
+    const file = this.plugin.app.vault.getAbstractFileByPath(preview.path);
+    if (!(file instanceof TFile)) return;
+
+    const frontmatter = this.plugin.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (!isRecord(frontmatter)) return;
+
+    for (const property of properties) {
+      if (!Object.prototype.hasOwnProperty.call(frontmatter, property)) continue;
+
+      const value = formatFrontmatterValue(frontmatter[property]);
+      if (!value) continue;
+
+      const row = container.createDiv('doomscroll-card-frontmatter-row');
+      row.createSpan({
+        text: `${property}:`,
+        cls: 'doomscroll-card-frontmatter-property',
+      });
+      row.createSpan({
+        text: value,
+        cls: 'doomscroll-card-frontmatter-value',
+      });
+    }
   }
 
   private async renderSnippet(
@@ -769,6 +824,9 @@ export class DoomscrollView extends ItemView {
     }
 
     await this.renderSnippet(preview, snippetEl);
+    this.renderCardFrontmatter(card, preview, 'before');
+    this.renderCardFrontmatter(card, preview, 'after');
+    this.cacheCardSize(card);
   }
 
   private async removeDeletedNote(path: string): Promise<void> {
@@ -945,10 +1003,52 @@ export class DoomscrollView extends ItemView {
 
     rememberCardSize(card, this.isSimplifiedView(), this.getPreviewSize());
   }
+
+  private renderCardFrontmatter(
+    card: HTMLElement,
+    preview: NotePreview,
+    position: 'before' | 'after'
+  ): void {
+    card.querySelector(`.doomscroll-card-frontmatter-${position}`)?.remove();
+
+    const frontmatterEl = card.createDiv('doomscroll-card-frontmatter');
+    frontmatterEl.classList.add(`doomscroll-card-frontmatter-${position}`);
+    const properties =
+      position === 'before'
+        ? this.plugin.data.settings.frontmatterBeforeProps ?? []
+        : this.plugin.data.settings.frontmatterAfterProps ?? [];
+    this.renderFrontmatterProperties(preview, frontmatterEl, properties);
+    if (frontmatterEl.childElementCount === 0) {
+      frontmatterEl.remove();
+      return;
+    }
+
+    const snippetEl = card.querySelector('.doomscroll-card-snippet');
+    if (position === 'before' && snippetEl) {
+      card.insertBefore(frontmatterEl, snippetEl);
+    } else {
+      card.appendChild(frontmatterEl);
+    }
+  }
 }
 
 function getImageDimensionCacheKey(preview: NotePreview): string {
   return `${preview.path}\u0000${preview.imagePath ?? ''}`;
+}
+
+function formatFrontmatterValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) {
+    return value.map(formatFrontmatterValue).filter(Boolean).join(', ');
+  }
+  if (isRecord(value)) {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 function applyImageDimensions(
