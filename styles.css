@@ -201,6 +201,15 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 10;
   line-clamp: 10;
+  max-height: calc(1.35rem * 10);
+}
+
+/* Bases owns its internal virtualization layout. Clip the rendered view at
+ * the same preview height instead of rewriting its private DOM/styles. */
+.doomscroll-card-snippet-markdown .bases-view,
+.doomscroll-card-snippet-markdown .bases-embed {
+  max-height: calc(1.35rem * 10);
+  overflow: hidden;
 }
 
 .doomscroll-card-snippet-markdown > :first-child,
@@ -294,21 +303,46 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 8;
   line-clamp: 8;
+  max-height: calc(1.35rem * 8);
+}
+
+.doomscroll-card-snippet-simple .bases-view,
+.doomscroll-card-snippet-simple .bases-embed {
+  max-height: calc(1.35rem * 8);
+  overflow: hidden;
 }
 
 .doomscroll-card-snippet-size-small {
   -webkit-line-clamp: 4;
   line-clamp: 4;
+  max-height: calc(1.35rem * 4);
+}
+
+.doomscroll-card-snippet-size-small .bases-view,
+.doomscroll-card-snippet-size-small .bases-embed {
+  max-height: calc(1.35rem * 4);
 }
 
 .doomscroll-card-snippet-markdown.doomscroll-card-snippet-size-large {
   -webkit-line-clamp: 15;
   line-clamp: 15;
+  max-height: calc(1.35rem * 15);
+}
+
+.doomscroll-card-snippet-markdown.doomscroll-card-snippet-size-large .bases-view,
+.doomscroll-card-snippet-markdown.doomscroll-card-snippet-size-large .bases-embed {
+  max-height: calc(1.35rem * 15);
 }
 
 .doomscroll-card-snippet-simple.doomscroll-card-snippet-size-large {
   -webkit-line-clamp: 12;
   line-clamp: 12;
+  max-height: calc(1.35rem * 12);
+}
+
+.doomscroll-card-snippet-simple.doomscroll-card-snippet-size-large .bases-view,
+.doomscroll-card-snippet-simple.doomscroll-card-snippet-size-large .bases-embed {
+  max-height: calc(1.35rem * 12);
 }
 
 .doomscroll-loading {

@@ -1,6 +1,8 @@
 import {
   ItemView,
   Component,
+  EventRef,
+  Events,
   MarkdownRenderer,
   WorkspaceLeaf,
   TFile,
@@ -25,6 +27,10 @@ const MAX_RENDERED_SNIPPET_CACHE_ENTRIES = 100;
 const MAX_IMAGE_DIMENSION_CACHE_ENTRIES = 200;
 const MAX_CARD_SIZE_CACHE_ENTRIES = 200;
 const INFINITE_SCROLL_CHUNK_SIZE = 20;
+const PLUGIN_INDEX_READY_TIMEOUT_MS = 10_000;
+const BASES_RENDER_TIMEOUT_MS = 3_000;
+const PLUGIN_RENDER_QUIET_MS = 200;
+const PLUGIN_RENDER_TIMEOUT_MS = 3_000;
 const IMAGE_FILE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp)$/i;
 
 interface ImageDimensions {
@@ -56,6 +62,17 @@ interface DoomscrollViewState {
   scrollTop: number;
 }
 
+interface DataviewApiLike {
+  index?: {
+    initialized?: boolean;
+    revision?: number;
+  };
+}
+
+interface WindowWithDataviewApi extends Window {
+  DataviewAPI?: DataviewApiLike;
+}
+
 export class DoomscrollView extends ItemView {
   plugin: DoomscrollPlugin;
   containerEl: HTMLElement;
@@ -81,6 +98,10 @@ export class DoomscrollView extends ItemView {
   private renderedSimplifiedView: boolean | null = null;
   private renderedPreviewSize: PreviewSize | null = null;
   private renderedFrontmatterPropertiesKey: string | null = null;
+  private snippetRenderGenerations = new WeakMap<HTMLElement, number>();
+  private isClosed = false;
+  private pluginRefreshTimer: number | null = null;
+  private pluginRefreshExcludePaths = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, plugin: DoomscrollPlugin) {
     super(leaf);
@@ -92,12 +113,22 @@ export class DoomscrollView extends ItemView {
           if (IMAGE_FILE_EXT_RE.test(file.path)) {
             invalidateImageCaches();
           }
+          if (file.extension === 'base') {
+            this.schedulePluginPreviewRefresh();
+          }
         }
       })
     );
     this.registerEvent(
       this.plugin.app.metadataCache.on('changed', (file) => {
         void this.refreshModifiedCard(file);
+        this.schedulePluginPreviewRefresh(file.path);
+      })
+    );
+    const workspaceEvents = this.plugin.app.workspace as unknown as Events;
+    this.registerEvent(
+      workspaceEvents.on('dataview:refresh-views', () => {
+        this.schedulePluginPreviewRefresh();
       })
     );
     this.registerEvent(
@@ -157,6 +188,8 @@ export class DoomscrollView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    this.isClosed = false;
+    this.snippetRenderGenerations = new WeakMap();
     await this.render();
   }
 
@@ -844,55 +877,190 @@ export class DoomscrollView extends ItemView {
     preview: NotePreview,
     snippetEl: HTMLElement
   ): Promise<void> {
+    if (this.isClosed || !snippetEl.isConnected) return;
+
+    const generation =
+      (this.snippetRenderGenerations.get(snippetEl) ?? 0) + 1;
+    this.snippetRenderGenerations.set(snippetEl, generation);
+    const isCurrent = (): boolean =>
+      !this.isClosed &&
+      snippetEl.isConnected &&
+      this.snippetRenderGenerations.get(snippetEl) === generation;
+    const isCancelled = (): boolean => !isCurrent();
+
     const file = this.plugin.app.vault.getAbstractFileByPath(preview.path);
     if (!(file instanceof TFile)) {
-      snippetEl.textContent = '(no preview text)';
+      if (isCurrent()) snippetEl.textContent = '(no preview text)';
       return;
     }
 
     const simplified = this.isSimplifiedView();
-    const cacheKey = `${simplified ? 'simplified' : 'markdown'}:${file.path}:${file.stat.mtime}`;
-    const cached = this.renderedSnippetCache.get(cacheKey);
-    if (cached !== undefined) {
-      this.cacheRenderedSnippet(cacheKey, cached);
-      this.setSnippetContent(snippetEl, cached, simplified);
-      this.cacheCardSize(snippetEl.closest('.doomscroll-card'));
-      return;
-    }
 
     try {
+      await this.waitForDataviewIndex(isCancelled);
+      if (!isCurrent()) return;
+
+      const cacheKey = this.getRenderedSnippetCacheKey(file, simplified);
+      const cached = this.renderedSnippetCache.get(cacheKey);
+      if (cached !== undefined) {
+        this.cacheRenderedSnippet(cacheKey, cached);
+        if (!isCurrent()) return;
+        this.setSnippetContent(snippetEl, cached, simplified);
+        this.cacheCardSize(snippetEl.closest('.doomscroll-card'));
+        return;
+      }
+
       const content = await this.plugin.app.vault.cachedRead(file);
+      if (!isCurrent()) return;
       const markdown = preparePreviewMarkdown(content);
       const rendered = document.createElement('div');
+      // Keep the staging tree attached while Obsidian and third-party
+      // post-processors finish. Plugins such as Dataview use shown/inserted
+      // lifecycle checks when scheduling their initial render.
+      snippetEl.replaceChildren(rendered);
       const renderComponent = new Component();
       renderComponent.load();
       let prepared: HTMLElement;
       try {
-        await MarkdownRenderer.renderMarkdown(
+        await MarkdownRenderer.render(
+          this.plugin.app,
           markdown,
           rendered,
           file.path,
           renderComponent
         );
 
+        // MarkdownRenderer does not await every plugin-owned child render.
+        // Wait for the staging tree to become quiet before taking the cached
+        // snapshot, then use the Bases loading marker as a stronger signal for
+        // its asynchronous query.
+        await waitForPluginRenderToSettle(rendered, isCancelled);
+        await waitForBasesViewsToSettle(rendered, isCancelled);
+        if (!isCurrent()) return;
+
         prepared = prepareRenderedPreview(rendered, simplified);
       } finally {
         renderComponent.unload();
       }
+      if (!isCurrent()) return;
       this.cacheRenderedSnippet(cacheKey, prepared);
-      if (snippetEl.isConnected) {
+      if (isCurrent()) {
         this.setSnippetContent(snippetEl, prepared, simplified);
         this.cacheCardSize(snippetEl.closest('.doomscroll-card'));
       }
     } catch (error) {
       console.error(`Error rendering preview for ${file.path}:`, error);
-      if (snippetEl.isConnected) {
+      if (isCurrent()) {
         snippetEl.textContent = preview.snippet ?? '(no preview text)';
       }
     }
   }
 
+  private getRenderedSnippetCacheKey(
+    file: TFile,
+    simplified: boolean
+  ): string {
+    const dataviewApi = (window as WindowWithDataviewApi).DataviewAPI;
+    const dataviewRevision = dataviewApi?.index?.revision ?? 'none';
+    return `${simplified ? 'simplified' : 'markdown'}:${file.path}:${file.stat.mtime}:${dataviewRevision}`;
+  }
+
+  /**
+   * Dataview registers its Markdown renderer immediately, but builds its
+   * page index asynchronously. Rendering a query before that index is ready
+   * produces a valid-looking empty result which is then captured in the
+   * preview cache. Wait for Dataview when it is present, while keeping the
+   * renderer usable with other plugins or with Dataview disabled.
+   */
+  private async waitForDataviewIndex(
+    isCancelled: () => boolean
+  ): Promise<void> {
+    const dataviewApi = (window as WindowWithDataviewApi).DataviewAPI;
+    if (isCancelled() || dataviewApi?.index?.initialized !== false) return;
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let timeoutId: number | null = null;
+      let cancelPollId: number | null = null;
+      let eventRef: EventRef | null = null;
+      const metadataCacheEvents =
+        this.plugin.app.metadataCache as unknown as Events;
+
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        if (cancelPollId !== null) window.clearInterval(cancelPollId);
+        if (eventRef) metadataCacheEvents.offref(eventRef);
+        resolve();
+      };
+
+      eventRef = metadataCacheEvents.on(
+        'dataview:index-ready',
+        finish
+      );
+      timeoutId = window.setTimeout(finish, PLUGIN_INDEX_READY_TIMEOUT_MS);
+      cancelPollId = window.setInterval(() => {
+        if (isCancelled()) finish();
+      }, 100);
+    });
+  }
+
+  private schedulePluginPreviewRefresh(excludePath?: string): void {
+    if (this.isClosed) return;
+
+    if (excludePath) {
+      this.pluginRefreshExcludePaths.add(excludePath);
+    } else {
+      this.pluginRefreshExcludePaths.clear();
+    }
+
+    if (this.pluginRefreshTimer !== null) {
+      window.clearTimeout(this.pluginRefreshTimer);
+    }
+    this.pluginRefreshTimer = window.setTimeout(() => {
+      this.pluginRefreshTimer = null;
+      const excludedPaths = this.pluginRefreshExcludePaths;
+      this.pluginRefreshExcludePaths = new Set();
+      void this.refreshPluginPreviews(excludedPaths);
+    }, 150);
+  }
+
+  private async refreshPluginPreviews(
+    excludedPaths: ReadonlySet<string> = new Set()
+  ): Promise<void> {
+    if (this.isClosed) return;
+
+    const renders: Promise<void>[] = [];
+    this.containerEl
+      .querySelectorAll<HTMLElement>('.doomscroll-card')
+      .forEach((card) => {
+        const path = card.dataset.path;
+        const snippetEl = card.querySelector('.doomscroll-card-snippet');
+        if (
+          !path ||
+          excludedPaths.has(path) ||
+          !(snippetEl instanceof HTMLElement) ||
+          !snippetEl.querySelector('.dataview, .bases-view, .bases-embed')
+        ) {
+          return;
+        }
+
+        const preview = this.currentBatch.find(
+          (candidate) => candidate.path === path
+        );
+        if (!preview) return;
+
+        invalidateRenderedSnippetCache(this.renderedSnippetCache, path);
+        renders.push(this.renderSnippet(preview, snippetEl));
+      });
+
+    await Promise.all(renders);
+  }
+
   private async refreshModifiedCard(file: TFile): Promise<void> {
+    if (this.isClosed) return;
+
     const preview = this.currentBatch.find(
       (candidate) => candidate.path === file.path
     );
@@ -915,13 +1083,10 @@ export class DoomscrollView extends ItemView {
     invalidateCardSizeCache(file.path);
     card.style.removeProperty('min-height');
 
-    for (const key of this.renderedSnippetCache.keys()) {
-      if (key.includes(`:${file.path}:`)) {
-        this.renderedSnippetCache.delete(key);
-      }
-    }
+    invalidateRenderedSnippetCache(this.renderedSnippetCache, file.path);
 
     await this.renderSnippet(preview, snippetEl);
+    if (this.isClosed || !card.isConnected) return;
     this.renderCardFrontmatter(card, preview, 'before');
     this.renderCardFrontmatter(card, preview, 'after');
     this.cacheCardSize(card);
@@ -1080,6 +1245,13 @@ export class DoomscrollView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.isClosed = true;
+    this.snippetRenderGenerations = new WeakMap();
+    this.pluginRefreshExcludePaths.clear();
+    if (this.pluginRefreshTimer !== null) {
+      window.clearTimeout(this.pluginRefreshTimer);
+      this.pluginRefreshTimer = null;
+    }
     if (this.cardObserver) {
       this.cardObserver.disconnect();
       this.cardObserver = null;
@@ -1252,6 +1424,112 @@ function invalidateImageCaches(): void {
 
 function clearCardSizeCache(): void {
   cardSizeCache.clear();
+}
+
+function invalidateRenderedSnippetCache(
+  cache: Map<string, HTMLElement>,
+  path: string
+): void {
+  for (const key of cache.keys()) {
+    if (key.includes(`:${path}:`)) {
+      cache.delete(key);
+    }
+  }
+}
+
+function waitForPluginRenderToSettle(
+  container: HTMLElement,
+  isCancelled: () => boolean
+): Promise<void> {
+  if (
+    isCancelled() ||
+    !container.querySelector('.dataview, .bases-view, .bases-embed')
+  ) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let quietTimerId: number | null = null;
+    let timeoutId: number | null = null;
+    let cancelPollId: number | null = null;
+    const observer = new MutationObserver(() => {
+      scheduleQuietCheck();
+    });
+
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      if (quietTimerId !== null) window.clearTimeout(quietTimerId);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (cancelPollId !== null) window.clearInterval(cancelPollId);
+      resolve();
+    };
+
+    const scheduleQuietCheck = (): void => {
+      if (isCancelled()) {
+        finish();
+        return;
+      }
+      if (quietTimerId !== null) window.clearTimeout(quietTimerId);
+      quietTimerId = window.setTimeout(finish, PLUGIN_RENDER_QUIET_MS);
+    };
+
+    observer.observe(container, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    timeoutId = window.setTimeout(finish, PLUGIN_RENDER_TIMEOUT_MS);
+    cancelPollId = window.setInterval(() => {
+      if (isCancelled()) finish();
+    }, 100);
+    scheduleQuietCheck();
+  });
+}
+
+function waitForBasesViewsToSettle(
+  container: HTMLElement,
+  isCancelled: () => boolean
+): Promise<void> {
+  const hasLoadingView = (): boolean =>
+    container.querySelector('.bases-view .is-loading') !== null;
+
+  if (isCancelled() || !hasLoadingView()) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId: number | null = null;
+    let cancelPollId: number | null = null;
+    const observer = new MutationObserver(() => {
+      if (isCancelled() || !hasLoadingView()) finish();
+    });
+
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (cancelPollId !== null) window.clearInterval(cancelPollId);
+      resolve();
+    };
+
+    observer.observe(container, {
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+      childList: true,
+      subtree: true,
+    });
+    timeoutId = window.setTimeout(finish, BASES_RENDER_TIMEOUT_MS);
+    cancelPollId = window.setInterval(() => {
+      if (isCancelled()) finish();
+    }, 100);
+  });
 }
 
 function hasSameOrder(
