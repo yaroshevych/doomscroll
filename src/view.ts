@@ -24,6 +24,7 @@ const MAX_BATCH_HISTORY = 20;
 const MAX_RENDERED_SNIPPET_CACHE_ENTRIES = 100;
 const MAX_IMAGE_DIMENSION_CACHE_ENTRIES = 200;
 const MAX_CARD_SIZE_CACHE_ENTRIES = 200;
+const INFINITE_SCROLL_CHUNK_SIZE = 20;
 const IMAGE_FILE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp)$/i;
 
 interface ImageDimensions {
@@ -62,6 +63,9 @@ export class DoomscrollView extends ItemView {
   currentBatch: NotePreview[] = [];
   imageObserver: IntersectionObserver | null = null;
   cardObserver: IntersectionObserver | null = null;
+  private infiniteScrollObserver: IntersectionObserver | null = null;
+  private infiniteScrollLoading = false;
+  private infiniteScrollExhausted = false;
   viewedPathsInBatch: Set<string> = new Set();
   batchHistory: NotePreview[][] = [];
   batchHistoryCursor: number = -1;
@@ -378,7 +382,9 @@ export class DoomscrollView extends ItemView {
       this.currentBatch = selectBatch(
         candidates,
         this.plugin.data.history,
-        this.plugin.data.settings.batchSize,
+        this.plugin.data.settings.infiniteScroll
+          ? INFINITE_SCROLL_CHUNK_SIZE
+          : this.plugin.data.settings.batchSize,
         Date.now()
       );
       this.batchSettingsKey = this.getBatchSettingsKey();
@@ -407,6 +413,10 @@ export class DoomscrollView extends ItemView {
 
     // Stop observing cards from the previous batch before replacing them.
     this.cardObserver?.disconnect();
+    this.infiniteScrollObserver?.disconnect();
+    this.infiniteScrollObserver = null;
+    this.infiniteScrollLoading = false;
+    this.infiniteScrollExhausted = false;
     this.viewedPathsInBatch.clear();
 
     this.cardObserver = new IntersectionObserver(
@@ -465,6 +475,94 @@ export class DoomscrollView extends ItemView {
     reshuffleBtn.addEventListener('click', () => {
       void this.showNewBatch();
     });
+
+    if (this.plugin.data.settings.infiniteScroll) {
+      const sentinel = container.createDiv(
+        'doomscroll-infinite-scroll-sentinel'
+      );
+      this.infiniteScrollObserver = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) {
+            void this.loadMoreCards(container, sentinel);
+          }
+        },
+        { root: container, rootMargin: '400px' }
+      );
+      this.infiniteScrollObserver.observe(sentinel);
+    }
+  }
+
+  private async loadMoreCards(
+    container: HTMLElement,
+    sentinel: HTMLElement
+  ): Promise<void> {
+    if (
+      this.infiniteScrollLoading ||
+      this.infiniteScrollExhausted ||
+      !this.plugin.data.settings.infiniteScroll ||
+      !sentinel.isConnected
+    ) {
+      return;
+    }
+
+    this.infiniteScrollLoading = true;
+    sentinel.textContent = 'Loading more notes…';
+
+    try {
+      const loadedPaths = new Set(
+        this.currentBatch.map((preview) => preview.path)
+      );
+      const candidates = Object.entries(this.plugin.data.previews)
+        .map(([path, stored]) => toNotePreview(path, stored))
+        .filter(
+          (preview) =>
+            !loadedPaths.has(preview.path) &&
+            (this.plugin.data.settings.includeMediaOnlyNotes ||
+              !isMediaOnlyPreview(preview))
+        );
+      const nextBatch = selectBatch(
+        candidates,
+        this.plugin.data.history,
+        INFINITE_SCROLL_CHUNK_SIZE,
+        Date.now()
+      );
+
+      if (nextBatch.length === 0) {
+        this.infiniteScrollExhausted = true;
+        sentinel.textContent = 'No more notes';
+        return;
+      }
+
+      this.currentBatch = [...this.currentBatch, ...nextBatch];
+      if (
+        this.batchHistoryCursor >= 0 &&
+        this.batchHistoryCursor < this.batchHistory.length
+      ) {
+        this.batchHistory[this.batchHistoryCursor] = this.currentBatch;
+      }
+
+      const reshuffleSection = container.querySelector(
+        '.doomscroll-reshuffle-section'
+      );
+      for (const preview of nextBatch) {
+        const card = this.renderCard(container, preview);
+        if (reshuffleSection) {
+          reshuffleSection.before(card);
+        } else {
+          sentinel.before(card);
+        }
+        this.cardObserver?.observe(card);
+      }
+
+      if (nextBatch.length < INFINITE_SCROLL_CHUNK_SIZE) {
+        this.infiniteScrollExhausted = true;
+        sentinel.textContent = 'No more notes';
+      } else {
+        sentinel.textContent = '';
+      }
+    } finally {
+      this.infiniteScrollLoading = false;
+    }
   }
 
   private async showNewBatch(): Promise<void> {
@@ -989,6 +1087,10 @@ export class DoomscrollView extends ItemView {
     if (this.imageObserver) {
       this.imageObserver.disconnect();
       this.imageObserver = null;
+    }
+    if (this.infiniteScrollObserver) {
+      this.infiniteScrollObserver.disconnect();
+      this.infiniteScrollObserver = null;
     }
     this.renderedSnippetCache.clear();
     if (this.historySaveTimer !== null) {

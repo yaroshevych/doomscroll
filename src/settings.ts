@@ -50,6 +50,7 @@ class FolderSuggest extends AbstractInputSuggest<string> {
 
 export const DEFAULT_SETTINGS: PluginSettings = {
   batchSize: 20,
+  infiniteScroll: false,
   includeMediaOnlyNotes: true,
   simplifiedView: true,
   previewSize: 'medium',
@@ -77,7 +78,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
     configureHeader(new Setting(containerEl));
 
-    new Setting(containerEl)
+    const batchSizeSetting = new Setting(containerEl)
       .setName('Batch size')
       .setDesc('Number of cards to show per reshuffle')
       .addDropdown((dropdown) =>
@@ -86,6 +87,20 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(String(this.plugin.data.settings.batchSize))
           .onChange(async (value) => {
             this.plugin.data.settings.batchSize = Number(value);
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+    batchSizeSetting.setDisabled(this.plugin.data.settings.infiniteScroll);
+
+    new Setting(containerEl)
+      .setName('Infinite scrolling')
+      .setDesc('Automatically load more notes as you reach the end of the feed')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.data.settings.infiniteScroll)
+          .onChange(async (value) => {
+            this.plugin.data.settings.infiniteScroll = value;
+            batchSizeSetting.setDisabled(value);
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );

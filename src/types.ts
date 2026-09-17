@@ -3,6 +3,7 @@ export type PreviewSize = 'small' | 'medium' | 'large';
 
 export interface PluginSettings {
   batchSize: number;
+  infiniteScroll: boolean;
   includeMediaOnlyNotes: boolean;
   simplifiedView: boolean;
   previewSize: PreviewSize;

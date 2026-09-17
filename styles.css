@@ -186,6 +186,14 @@
   white-space: pre-wrap;
 }
 
+.doomscroll-infinite-scroll-sentinel {
+  min-height: 2rem;
+  padding: 1rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
 .doomscroll-card-snippet-markdown {
   white-space: normal;
   overflow: hidden;

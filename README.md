@@ -28,6 +28,7 @@ Same scroll. Your content.
 
 - Shuffled card feed, not another list sorted by modification date
 - Manual reshuffle when the current batch is not doing it for you
+- Optional infinite scrolling that loads more notes as you reach the end
 - At most 20% of each batch is reserved for notes seen in the last seven days,
   unless there are not enough unseen notes
 - 30-minute cooldown before a note can appear again
@@ -62,6 +63,8 @@ Same scroll. Your content.
 ## Settings
 
 - **Batch size** (5 to 50): How many cards to show per reshuffle (default: 20)
+- **Infinite scrolling**: Load more notes automatically as you reach the end;
+  when enabled, batch size is fixed for incremental loading
 - **Simplified view**: Show concise previews with readable tables, links, and
   code; turn off for full Markdown formatting (default: on)
 - **Preview size**: Show a small, medium, or large text preview (default:
