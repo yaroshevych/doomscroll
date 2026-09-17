@@ -224,14 +224,14 @@
 /* Plugin output is a static snapshot inside a clickable card. Prevent plugin
  * controls, links, and row hover styles from treating it as an active view;
  * pointer events still reach the card itself and open the note. */
-.doomscroll-card-snippet .dataview,
-.doomscroll-card-snippet .dataview *,
-.doomscroll-card-snippet .bases-view,
-.doomscroll-card-snippet .bases-view *,
-.doomscroll-card-snippet .bases-embed,
-.doomscroll-card-snippet .bases-embed * {
-  pointer-events: none !important;
-  cursor: default !important;
+.doomscroll-card .doomscroll-card-snippet .dataview,
+.doomscroll-card .doomscroll-card-snippet .dataview *,
+.doomscroll-card .doomscroll-card-snippet .bases-view,
+.doomscroll-card .doomscroll-card-snippet .bases-view *,
+.doomscroll-card .doomscroll-card-snippet .bases-embed,
+.doomscroll-card .doomscroll-card-snippet .bases-embed * {
+  pointer-events: none;
+  cursor: default;
 }
 
 .doomscroll-card-snippet-markdown > :first-child,

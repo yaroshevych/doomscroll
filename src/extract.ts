@@ -309,7 +309,7 @@ export function prepareRenderedPreview(
       anchor.remove();
       return;
     }
-    const replacement = root.ownerDocument.createElement('span');
+    const replacement = root.createEl('span');
     // Do not copy Obsidian's `external-link`/icon classes: they add arrow
     // decorations that are distracting inside a card preview.
     replacement.className = 'doomscroll-preview-link';
@@ -340,7 +340,7 @@ export function prepareRenderedPreview(
 
     // Keep heading content, but remove heading semantics and visual weight.
     root.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
-      const paragraph = root.ownerDocument.createElement('p');
+      const paragraph = root.createEl('p');
       paragraph.className = 'doomscroll-simple-heading';
       while (heading.firstChild) paragraph.appendChild(heading.firstChild);
       heading.replaceWith(paragraph);

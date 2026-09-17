@@ -12,13 +12,16 @@ export default class DoomscrollPlugin extends Plugin {
   private settingsRefreshTimer: number | null = null;
 
   async onload(): Promise<void> {
-    // Load data
-    const loadedData = (await this.loadData()) as PluginData | null;
-
     type LegacySettings = PluginData['settings'] & {
       frontmatterDisplayProps?: unknown;
     };
-    const loadedSettings = loadedData?.settings as LegacySettings | undefined;
+    type LoadedPluginData = Omit<PluginData, 'settings'> & {
+      settings?: LegacySettings;
+    };
+
+    // Load data
+    const loadedData = (await this.loadData()) as LoadedPluginData | null;
+    const loadedSettings = loadedData?.settings;
     const legacyDisplayProps = Array.isArray(
       loadedSettings?.frontmatterDisplayProps
     )

@@ -920,11 +920,11 @@ export class DoomscrollView extends ItemView {
       const content = await this.plugin.app.vault.cachedRead(file);
       if (!isCurrent()) return;
       const markdown = preparePreviewMarkdown(content);
-      const rendered = document.createElement('div');
+      snippetEl.replaceChildren();
+      const rendered = snippetEl.createDiv();
       // Keep the staging tree attached while Obsidian and third-party
       // post-processors finish. Plugins such as Dataview use shown/inserted
       // lifecycle checks when scheduling their initial render.
-      snippetEl.replaceChildren(rendered);
       const renderComponent = new Component();
       renderComponent.load();
       let prepared: HTMLElement;
