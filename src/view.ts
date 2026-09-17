@@ -767,6 +767,13 @@ export class DoomscrollView extends ItemView {
       return;
     }
     snippetEl.replaceChildren(...Array.from(clone.childNodes));
+
+    if (clone.querySelector('.dataview, .bases-view, .bases-embed')) {
+      const interactionShield = snippetEl.createDiv(
+        'doomscroll-card-snippet-interaction-shield'
+      );
+      interactionShield.setAttribute('aria-hidden', 'true');
+    }
   }
 
   private cacheRenderedSnippet(key: string, renderedRoot: HTMLElement): void {

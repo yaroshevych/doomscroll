@@ -142,11 +142,20 @@
 }
 
 .doomscroll-card-snippet {
+  position: relative;
   margin: 0;
   color: var(--text-muted);
   font-size: 0.9rem;
   line-height: 1.5;
   white-space: pre-line;
+}
+
+.doomscroll-card-snippet-interaction-shield {
+  position: absolute;
+  z-index: 2147483647;
+  inset: 0;
+  cursor: default;
+  background: transparent;
 }
 
 .doomscroll-card-frontmatter {
@@ -210,6 +219,19 @@
 .doomscroll-card-snippet-markdown .bases-embed {
   max-height: calc(1.35rem * 10);
   overflow: hidden;
+}
+
+/* Plugin output is a static snapshot inside a clickable card. Prevent plugin
+ * controls, links, and row hover styles from treating it as an active view;
+ * pointer events still reach the card itself and open the note. */
+.doomscroll-card-snippet .dataview,
+.doomscroll-card-snippet .dataview *,
+.doomscroll-card-snippet .bases-view,
+.doomscroll-card-snippet .bases-view *,
+.doomscroll-card-snippet .bases-embed,
+.doomscroll-card-snippet .bases-embed * {
+  pointer-events: none !important;
+  cursor: default !important;
 }
 
 .doomscroll-card-snippet-markdown > :first-child,
