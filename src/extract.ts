@@ -309,7 +309,7 @@ export function prepareRenderedPreview(
       anchor.remove();
       return;
     }
-    const replacement = root.createEl('span');
+    const replacement = root.createSpan();
     // Do not copy Obsidian's `external-link`/icon classes: they add arrow
     // decorations that are distracting inside a card preview.
     replacement.className = 'doomscroll-preview-link';

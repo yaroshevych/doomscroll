@@ -4,6 +4,7 @@ import {
   Notice,
   normalizePath,
   PluginSettingTab,
+  requireApiVersion,
   Setting,
   type SettingDefinitionItem,
 } from 'obsidian';
@@ -286,7 +287,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     }
 
     await this.plugin.saveSettingsAndRefreshViews();
-    this.update();
+    this.refreshDeclarativeSettings();
   }
 
   private async addExcludedFolder(
@@ -296,7 +297,13 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     this.plugin.data.settings.excludeFolders.push(folder);
     await this.plugin.saveSettingsAndRefreshViews();
     if (inputEl) inputEl.value = '';
-    this.update();
+    this.refreshDeclarativeSettings();
+  }
+
+  private refreshDeclarativeSettings(): void {
+    if (requireApiVersion('1.13.0')) {
+      this.update();
+    }
   }
 
   private async removeExcludedFolder(
