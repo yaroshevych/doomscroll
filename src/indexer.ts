@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import { PluginData, StoredNotePreview } from './types';
 import {
   extractImage,
+  extractFrontmatterImages,
   hasMediaEmbed,
   hasTextualPreviewContent,
 } from './extract';
@@ -76,6 +77,39 @@ export class Indexer {
   getCandidateFiles(): TFile[] {
     const candidates: TFile[] = [];
     const allFiles = this.app.vault.getFiles();
+    const frontmatterImagePaths = new Set<string>();
+    if (this.data.settings.showNonMarkdownFiles) {
+      for (const sourceFile of allFiles) {
+        if (sourceFile.extension.toLowerCase() !== 'md') continue;
+        const frontmatter = this.app.metadataCache.getFileCache(sourceFile)
+          ?.frontmatter;
+        if (!isRecord(frontmatter)) continue;
+
+        for (const imagePath of extractFrontmatterImages(
+          frontmatter,
+          this.data.settings.frontmatterImageProps
+        )) {
+          if (/^https?:\/\//i.test(imagePath)) continue;
+          let lookupPath = imagePath;
+          try {
+            lookupPath = decodeURIComponent(imagePath);
+          } catch {
+            // Keep the original path when it is not URI-encoded.
+          }
+          const directFile = this.app.vault.getAbstractFileByPath(lookupPath);
+          const linkedFile =
+            directFile instanceof TFile
+              ? directFile
+              : this.app.metadataCache.getFirstLinkpathDest(
+                  lookupPath,
+                  sourceFile.path
+                );
+          if (linkedFile instanceof TFile && isImagePath(linkedFile.path)) {
+            frontmatterImagePaths.add(linkedFile.path);
+          }
+        }
+      }
+    }
     const excludeFolders = this.data.settings.excludeFolders
       .map((folderPath) => folderPath.replace(/\/+$/, ''))
       .filter((folderPath) => folderPath.length > 0);
@@ -122,6 +156,13 @@ export class Indexer {
       // Standalone attachments cannot have Markdown tags. They still pass
       // folder/glob filters and can be matched by path search terms.
       const isMarkdown = file.extension.toLowerCase() === 'md';
+      if (
+        !isMarkdown &&
+        isImagePath(file.path) &&
+        frontmatterImagePaths.has(file.path)
+      ) {
+        continue;
+      }
       if (!isMarkdown && !this.data.settings.showNonMarkdownFiles) {
         continue;
       }

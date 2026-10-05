@@ -13,22 +13,39 @@ function hasImageExtension(path: string): boolean {
   return IMAGE_EXT_RE.test(clean);
 }
 
+export function extractFrontmatterImages(
+  frontmatter: Record<string, unknown> | undefined,
+  frontmatterImageProps: string[]
+): string[] {
+  if (!frontmatter) return [];
+
+  const images: string[] = [];
+  for (const prop of frontmatterImageProps) {
+    const value = frontmatter[prop];
+    const values = Array.isArray(value) ? value : [value];
+    for (const entry of values) {
+      if (typeof entry !== 'string') continue;
+      let imagePath = entry.trim();
+      const markdownMatch = imagePath.match(/!\[[^\]]*\]\(([^)]+)\)/);
+      if (markdownMatch) imagePath = markdownMatch[1]!;
+      if (imagePath.startsWith('![[') && imagePath.endsWith(']]')) {
+        imagePath = imagePath.slice(3, -2);
+      } else if (imagePath.startsWith('[[') && imagePath.endsWith(']]')) {
+        imagePath = imagePath.slice(2, -2);
+      }
+      imagePath = imagePath.split('|')[0]!.trim();
+      if (hasImageExtension(imagePath)) images.push(imagePath);
+    }
+  }
+  return images;
+}
+
 export function extractImage(
   content: string,
   frontmatter: Record<string, unknown> | undefined,
   frontmatterImageProps: string[]
 ): string | null {
-  if (frontmatter) {
-    // Check frontmatter properties in order
-    for (const prop of frontmatterImageProps) {
-      const value = frontmatter[prop];
-      if (typeof value === 'string') {
-        return value.replace(/^\[\[/, '').replace(/\]\]$/, '');
-      }
-    }
-  }
-
-  // Check for markdown image: ![alt](path) — first one with an image extension
+  // Prefer an image embedded in the note body over a frontmatter cover.
   const markdownImageRe = /!\[.*?\]\(([^)]+)\)/g;
   let mdMatch: RegExpExecArray | null;
   while ((mdMatch = markdownImageRe.exec(content))) {
@@ -53,7 +70,8 @@ export function extractImage(
     return htmlImageMatch[1]!;
   }
 
-  return null;
+  // Fall back to the first image in the configured frontmatter properties.
+  return extractFrontmatterImages(frontmatter, frontmatterImageProps)[0] ?? null;
 }
 
 export function extractSnippet(content: string): string {
