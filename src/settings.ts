@@ -359,6 +359,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
     configureHeader(new Setting(containerEl));
 
+    let batchSizeSetting: Setting | null = null;
     new Setting(containerEl)
       .setName('Infinite scrolling')
       .setDesc('Automatically load more notes as you reach the end of the feed')
@@ -367,11 +368,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.infiniteScroll)
           .onChange(async (value) => {
             this.plugin.data.settings.infiniteScroll = value;
+            batchSizeSetting?.setDisabled(value);
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );
 
-    const batchSizeSetting = new Setting(containerEl)
+    batchSizeSetting = new Setting(containerEl)
       .setName('Batch size')
       .setDesc('Number of cards to show per reshuffle')
       .addDropdown((dropdown) =>
