@@ -192,7 +192,7 @@ export class DoomscrollView extends ItemView {
   }
 
   private moveCardFocus(delta: 1 | -1): void {
-    const body = this.containerEl.querySelector<HTMLElement>('.doomscroll-body');
+    const body = this.getFeedScrollElement();
     const cards = Array.from(
       this.containerEl.querySelectorAll<HTMLElement>('.doomscroll-card')
     );
@@ -248,9 +248,7 @@ export class DoomscrollView extends ItemView {
         card.classList.add('doomscroll-card-navigating');
       }
 
-      const body = this.containerEl.querySelector<HTMLElement>(
-        '.doomscroll-body'
-      );
+      const body = this.getFeedScrollElement();
       if (body) {
         const bodyTop = body.getBoundingClientRect().top + body.clientTop;
         const cardTop = card.getBoundingClientRect().top;
@@ -332,9 +330,9 @@ export class DoomscrollView extends ItemView {
   }
 
   getState(): Record<string, unknown> {
-    const body = this.containerEl.querySelector('.doomscroll-body');
+    const body = this.getFeedScrollElement();
     const scrollTop =
-      body instanceof HTMLElement ? body.scrollTop : this.restoredScrollTop;
+      body ? body.scrollTop : this.restoredScrollTop;
 
     return {
       batchPaths: this.currentBatch.map((preview) => preview.path),
@@ -345,7 +343,7 @@ export class DoomscrollView extends ItemView {
       scrollTop,
       focusedPath: this.focusedPath,
       scrollAnchor:
-        body instanceof HTMLElement ? this.getScrollAnchor(body) : null,
+        body ? this.getScrollAnchor(body) : null,
     } satisfies DoomscrollViewState;
   }
 
@@ -478,8 +476,35 @@ export class DoomscrollView extends ItemView {
     }
   }
 
+  private syncHeaderScrollPreference(): boolean {
+    const enabledClass = 'doomscroll-header-scrolls-with-feed';
+    const wasEnabled = this.containerEl.classList.contains(enabledClass);
+    const previousScrollTop = wasEnabled
+      ? this.containerEl.scrollTop
+      : this.containerEl.querySelector<HTMLElement>('.doomscroll-body')?.scrollTop ?? 0;
+    this.containerEl.classList.toggle(
+      enabledClass,
+      this.plugin.data.settings.headerScrollsWithFeed
+    );
+    const changed =
+      wasEnabled !== this.plugin.data.settings.headerScrollsWithFeed;
+    if (changed) {
+      const nextScrollElement = this.getFeedScrollElement();
+      if (nextScrollElement) nextScrollElement.scrollTop = previousScrollTop;
+    }
+    return changed;
+  }
+
+  private getFeedScrollElement(): HTMLElement | null {
+    if (this.plugin.data.settings.headerScrollsWithFeed) {
+      return this.containerEl;
+    }
+    return this.containerEl.querySelector<HTMLElement>('.doomscroll-body');
+  }
+
   async refreshForCurrentSettings(): Promise<void> {
     this.syncAnimationPreference();
+    const headerScrollPreferenceChanged = this.syncHeaderScrollPreference();
     if (this.isRefreshing) {
       this.pendingSettingsRefresh = true;
       return;
@@ -510,6 +535,13 @@ export class DoomscrollView extends ItemView {
     const frontmatterPropertiesChanged =
       this.renderedFrontmatterPropertiesKey !==
       this.getFrontmatterPropertiesKey();
+    if (headerScrollPreferenceChanged && this.hasRendered) {
+      const body = this.containerEl.querySelector<HTMLElement>('.doomscroll-body');
+      const sentinel = body?.querySelector<HTMLElement>(
+        '.doomscroll-infinite-scroll-sentinel'
+      );
+      if (body && sentinel) this.observeInfiniteScroll(body, sentinel);
+    }
     if (
       !refreshFailed &&
       (indexRefreshed ||
@@ -535,7 +567,7 @@ export class DoomscrollView extends ItemView {
 
       if (this.hasRendered) {
         this.renderBatch();
-        this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
+        this.getFeedScrollElement()?.scrollTo({ top: 0 });
       }
     }
 
@@ -549,9 +581,41 @@ export class DoomscrollView extends ItemView {
     this.containerEl.empty();
     this.containerEl.addClass('doomscroll-view-container');
     this.syncAnimationPreference();
+    this.syncHeaderScrollPreference();
 
-    // Header row
     const header = this.containerEl.createDiv('doomscroll-header');
+
+    // Body - scrollable container
+    const bodyContainer = this.containerEl.createDiv('doomscroll-body');
+    bodyContainer.setAttribute('role', 'feed');
+    bodyContainer.setAttribute('aria-label', 'Doomscroll');
+    bodyContainer.tabIndex = 0;
+    bodyContainer.addEventListener(
+      'scroll',
+      () => {
+        this.restoredScrollTop =
+          (this.getFeedScrollElement() ?? bodyContainer).scrollTop;
+      },
+      { passive: true }
+    );
+    this.containerEl.addEventListener(
+      'scroll',
+      () => {
+        this.restoredScrollTop =
+          (this.getFeedScrollElement() ?? bodyContainer).scrollTop;
+      },
+      { passive: true }
+    );
+    bodyContainer.addEventListener(
+      'wheel',
+      () => this.cancelScrollAnimation(),
+      { passive: true }
+    );
+    bodyContainer.addEventListener(
+      'pointerdown',
+      () => this.cancelScrollAnimation(),
+      { passive: true }
+    );
 
     const title = header.createEl('h2');
     title.textContent = 'Doomscroll';
@@ -590,29 +654,6 @@ export class DoomscrollView extends ItemView {
       setting.open();
       setting.openTabById('doomscroll');
     });
-
-    // Body - scrollable container
-    const bodyContainer = this.containerEl.createDiv('doomscroll-body');
-    bodyContainer.setAttribute('role', 'feed');
-    bodyContainer.setAttribute('aria-label', 'Doomscroll');
-    bodyContainer.tabIndex = 0;
-    bodyContainer.addEventListener(
-      'scroll',
-      () => {
-        this.restoredScrollTop = bodyContainer.scrollTop;
-      },
-      { passive: true }
-    );
-    bodyContainer.addEventListener(
-      'wheel',
-      () => this.cancelScrollAnimation(),
-      { passive: true }
-    );
-    bodyContainer.addEventListener(
-      'pointerdown',
-      () => this.cancelScrollAnimation(),
-      { passive: true }
-    );
 
     // Refresh on every plugin session so a persisted index cannot outlive the
     // filters that were active when it was created. The indexer also detects
@@ -685,8 +726,8 @@ export class DoomscrollView extends ItemView {
   private restoreScrollPosition(): void {
     const scrollTop = this.restoredScrollTop;
     const restore = (): void => {
-      const body = this.containerEl.querySelector('.doomscroll-body');
-      if (body instanceof HTMLElement) {
+      const body = this.getFeedScrollElement();
+      if (body) {
         const anchor = this.restoredScrollAnchor;
         const anchorCard = anchor
           ? Array.from(
@@ -876,7 +917,7 @@ export class DoomscrollView extends ItemView {
           void this.loadMoreCards(container, sentinel);
         }
       },
-      { root: container, rootMargin: '400px' }
+      { root: this.getFeedScrollElement(), rootMargin: '400px' }
     );
     this.infiniteScrollObserver.observe(sentinel);
   }
@@ -981,7 +1022,7 @@ export class DoomscrollView extends ItemView {
       this.renderBatch(
         settingsChanged || indexRefreshed ? undefined : previousOrder
       );
-      this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
+      this.getFeedScrollElement()?.scrollTo({ top: 0 });
     } catch (error) {
       console.error('Error refreshing vault index:', error);
     } finally {
@@ -1006,7 +1047,7 @@ export class DoomscrollView extends ItemView {
     this.batchHistoryCursor = previousCursor;
     this.currentBatch = previousBatch;
     this.renderBatch();
-    this.containerEl.querySelector('.doomscroll-body')?.scrollTo({ top: 0 });
+    this.getFeedScrollElement()?.scrollTo({ top: 0 });
   }
 
   private updateBackButton(): void {
@@ -1579,15 +1620,7 @@ export class DoomscrollView extends ItemView {
 
     if (file instanceof TFile) {
       // A very quick tap can happen before IntersectionObserver fires.
-      if (!this.viewedPathsInBatch.has(preview.path)) {
-        this.viewedPathsInBatch.add(preview.path);
-        this.plugin.data.history = recordView(
-          this.plugin.data.history,
-          preview.path,
-          Date.now()
-        );
-        this.scheduleHistorySave();
-      }
+      this.recordViewedPath(preview.path);
 
       const behavior = this.plugin.data.settings.openNoteBehavior;
       const leaf =

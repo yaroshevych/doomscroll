@@ -4,6 +4,7 @@ export type PreviewSize = 'small' | 'medium' | 'large';
 export interface PluginSettings {
   batchSize: number;
   infiniteScroll: boolean;
+  headerScrollsWithFeed: boolean;
   includeMediaOnlyNotes: boolean;
   showNonMarkdownFiles: boolean;
   simplifiedView: boolean;

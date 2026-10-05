@@ -53,6 +53,7 @@ class FolderSuggest extends AbstractInputSuggest<string> {
 export const DEFAULT_SETTINGS: PluginSettings = {
   batchSize: 20,
   infiniteScroll: false,
+  headerScrollsWithFeed: false,
   includeMediaOnlyNotes: true,
   showNonMarkdownFiles: true,
   simplifiedView: true,
@@ -96,6 +97,11 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         name: 'Infinite scrolling',
         desc: 'Automatically load more notes as you reach the end of the feed',
         control: { type: 'toggle', key: 'infiniteScroll' },
+      },
+      {
+        name: 'Header scrolls with feed',
+        desc: 'The header will scroll away from view',
+        control: { type: 'toggle', key: 'headerScrollsWithFeed' },
       },
       {
         name: 'Include media-only notes',
@@ -216,6 +222,8 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         return String(settings.batchSize);
       case 'infiniteScroll':
         return settings.infiniteScroll;
+      case 'headerScrollsWithFeed':
+        return settings.headerScrollsWithFeed;
       case 'includeMediaOnlyNotes':
         return settings.includeMediaOnlyNotes;
       case 'showNonMarkdownFiles':
@@ -257,6 +265,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       case 'infiniteScroll':
         if (typeof value !== 'boolean') return;
         settings.infiniteScroll = value;
+        break;
+      case 'headerScrollsWithFeed':
+        if (typeof value !== 'boolean') return;
+        settings.headerScrollsWithFeed = value;
         break;
       case 'includeMediaOnlyNotes':
         if (typeof value !== 'boolean') return;
@@ -370,6 +382,18 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.data.settings.infiniteScroll = value;
             batchSizeSetting.setDisabled(value);
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Header scrolls with feed')
+      .setDesc('The header will scroll away from view')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.data.settings.headerScrollsWithFeed)
+          .onChange(async (value) => {
+            this.plugin.data.settings.headerScrollsWithFeed = value;
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );

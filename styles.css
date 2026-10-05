@@ -14,6 +14,23 @@
   padding-top: calc(1rem + env(safe-area-inset-top));
   border-bottom: 1px solid var(--divider-color);
   flex-shrink: 0;
+  margin: 0;
+}
+
+.doomscroll-view-container.doomscroll-header-scrolls-with-feed {
+  display: block;
+  overflow-y: auto;
+}
+
+.doomscroll-header-scrolls-with-feed .doomscroll-body {
+  height: auto;
+  min-height: auto;
+  overflow: visible;
+  padding-top: 1rem;
+}
+
+.doomscroll-header-scrolls-with-feed .doomscroll-header {
+  flex-shrink: 0;
 }
 
 .doomscroll-title {
