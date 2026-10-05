@@ -90,7 +90,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       },
       {
         name: 'Batch size',
-        desc: 'Number of cards to show per reshuffle',
+        desc: 'Number of cards to show per reshuffle. Does not apply while infinite scrolling is enabled.',
         control: {
           type: 'dropdown',
           key: 'batchSize',
@@ -375,7 +375,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
     batchSizeSetting = new Setting(containerEl)
       .setName('Batch size')
-      .setDesc('Number of cards to show per reshuffle')
+      .setDesc('Number of cards to show per reshuffle. Does not apply while infinite scrolling is enabled.')
       .addDropdown((dropdown) =>
         dropdown
           .addOptions({ '10': '10', '20': '20', '50': '50', '100': '100' })
