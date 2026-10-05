@@ -84,6 +84,11 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         render: (setting) => configureHeader(setting),
       },
       {
+        name: 'Infinite scrolling',
+        desc: 'Automatically load more notes as you reach the end of the feed',
+        control: { type: 'toggle', key: 'infiniteScroll' },
+      },
+      {
         name: 'Batch size',
         desc: 'Number of cards to show per reshuffle',
         control: {
@@ -92,11 +97,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           options: { '10': '10', '20': '20', '50': '50', '100': '100' },
           disabled: () => this.plugin.data.settings.infiniteScroll,
         },
-      },
-      {
-        name: 'Infinite scrolling',
-        desc: 'Automatically load more notes as you reach the end of the feed',
-        control: { type: 'toggle', key: 'infiniteScroll' },
       },
       {
         name: 'Header scrolls with feed',
@@ -359,6 +359,18 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
     configureHeader(new Setting(containerEl));
 
+    new Setting(containerEl)
+      .setName('Infinite scrolling')
+      .setDesc('Automatically load more notes as you reach the end of the feed')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.data.settings.infiniteScroll)
+          .onChange(async (value) => {
+            this.plugin.data.settings.infiniteScroll = value;
+            await this.plugin.saveSettingsAndRefreshViews();
+          })
+      );
+
     const batchSizeSetting = new Setting(containerEl)
       .setName('Batch size')
       .setDesc('Number of cards to show per reshuffle')
@@ -372,19 +384,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           })
       );
     batchSizeSetting.setDisabled(this.plugin.data.settings.infiniteScroll);
-
-    new Setting(containerEl)
-      .setName('Infinite scrolling')
-      .setDesc('Automatically load more notes as you reach the end of the feed')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.data.settings.infiniteScroll)
-          .onChange(async (value) => {
-            this.plugin.data.settings.infiniteScroll = value;
-            batchSizeSetting.setDisabled(value);
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
 
     new Setting(containerEl)
       .setName('Header scrolls with feed')
