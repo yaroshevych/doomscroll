@@ -131,9 +131,11 @@
   animation: doomscroll-card-navigation 280ms cubic-bezier(0.2, 0.75, 0.25, 1);
 }
 
-.doomscroll-view-container.doomscroll-reduce-animation .doomscroll-card {
-  animation: none !important;
-  transition: none !important;
+.doomscroll-view-container.doomscroll-reduce-animation
+  .doomscroll-body
+  .doomscroll-card {
+  animation: none;
+  transition: none;
 }
 
 @keyframes doomscroll-card-navigation {
