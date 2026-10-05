@@ -77,12 +77,22 @@ export class Indexer {
   getCandidateFiles(): TFile[] {
     const candidates: TFile[] = [];
     const allFiles = this.app.vault.getFiles();
-    const frontmatterImagePaths = new Set<string>();
+    const referencedAttachmentPaths = new Set<string>();
     if (this.data.settings.showNonMarkdownFiles) {
       for (const sourceFile of allFiles) {
         if (sourceFile.extension.toLowerCase() !== 'md') continue;
-        const frontmatter = this.app.metadataCache.getFileCache(sourceFile)
-          ?.frontmatter;
+        const fileCache = this.app.metadataCache.getFileCache(sourceFile);
+        for (const embed of fileCache?.embeds ?? []) {
+          const linkedFile = this.app.metadataCache.getFirstLinkpathDest(
+            embed.link,
+            sourceFile.path
+          );
+          if (linkedFile instanceof TFile) {
+            referencedAttachmentPaths.add(linkedFile.path);
+          }
+        }
+
+        const frontmatter = fileCache?.frontmatter;
         if (!isRecord(frontmatter)) continue;
 
         for (const imagePath of extractFrontmatterImages(
@@ -105,7 +115,7 @@ export class Indexer {
                   sourceFile.path
                 );
           if (linkedFile instanceof TFile && isImagePath(linkedFile.path)) {
-            frontmatterImagePaths.add(linkedFile.path);
+            referencedAttachmentPaths.add(linkedFile.path);
           }
         }
       }
@@ -158,8 +168,7 @@ export class Indexer {
       const isMarkdown = file.extension.toLowerCase() === 'md';
       if (
         !isMarkdown &&
-        isImagePath(file.path) &&
-        frontmatterImagePaths.has(file.path)
+        referencedAttachmentPaths.has(file.path)
       ) {
         continue;
       }
