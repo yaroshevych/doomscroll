@@ -21,6 +21,7 @@ import {
 import { selectBatch } from './selector';
 import { pickCardIndex } from './navigation';
 import { ShortcutsModal } from './help';
+import { PeekModal } from './peek';
 import { recordView } from './history';
 import { removePathFromBatches } from './batches';
 import {
@@ -180,6 +181,7 @@ export class DoomscrollView extends ItemView {
     bind(['j', 'ArrowDown'], () => this.moveCardFocus(1));
     bind(['k', 'ArrowUp'], () => this.moveCardFocus(-1));
     bind(['Enter', 'o'], () => this.openFocusedCard());
+    bind([' '], () => this.peekFocusedCard());
     bind(['r'], () => void this.showNewBatch());
     bind(['p'], () => void this.showPreviousBatch());
     bind(['Home'], () => this.focusCardAt('first'));
@@ -315,6 +317,33 @@ export class DoomscrollView extends ItemView {
     this.containerEl
       .querySelector<HTMLElement>('.doomscroll-card-focused')
       ?.click();
+  }
+
+  private peekFocusedCard(): void {
+    const card = this.containerEl.querySelector<HTMLElement>(
+      '.doomscroll-card-focused'
+    );
+    const path = card?.dataset.path;
+    if (!path) return;
+
+    const preview = this.currentBatch.find((item) => item.path === path);
+    const file = this.plugin.app.vault.getAbstractFileByPath(path);
+    if (!preview || !(file instanceof TFile)) return;
+
+    if (
+      file.extension !== 'md' &&
+      !isImagePath(file.path) &&
+      !isPdfPath(file.path) &&
+      !isVideoPath(file.path)
+    ) {
+      void this.openPreview(preview);
+      return;
+    }
+
+    this.recordViewedPath(path);
+    new PeekModal(this.app, file, () => {
+      void this.openPreviewInTab(file);
+    }).open();
   }
 
   getViewType(): string {
@@ -1629,6 +1658,22 @@ export class DoomscrollView extends ItemView {
           : this.plugin.app.workspace.getLeaf(behavior);
       await leaf.openFile(file);
     }
+  }
+
+  private recordViewedPath(path: string): void {
+    if (this.viewedPathsInBatch.has(path)) return;
+    this.viewedPathsInBatch.add(path);
+    this.plugin.data.history = recordView(
+      this.plugin.data.history,
+      path,
+      Date.now()
+    );
+    this.scheduleHistorySave();
+  }
+
+  private async openPreviewInTab(file: TFile): Promise<void> {
+    const leaf = this.plugin.app.workspace.getLeaf('tab');
+    await leaf.openFile(file);
   }
 
   private setupImageLazyLoad(

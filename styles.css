@@ -558,3 +558,51 @@
 .doomscroll-reshuffle-end-btn:hover {
   opacity: 0.9;
 }
+
+.modal.doomscroll-peek {
+  width: min(52rem, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.doomscroll-peek .modal-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.doomscroll-peek-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.doomscroll-peek-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.doomscroll-peek-pdf {
+  display: block;
+  width: 100%;
+  height: min(70vh, 48rem);
+  border: 0;
+}
+
+.doomscroll-peek-video {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+}
+
+.doomscroll-peek-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.75rem;
+}

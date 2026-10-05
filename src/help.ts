@@ -5,6 +5,7 @@ const SHORTCUTS: Array<[string[], string]> = [
   [['k', '↑'], 'Previous card'],
   [['Home'], 'First card'],
   [['End'], 'Last card'],
+  [['Space'], 'Quick look at the focused note'],
   [['Enter', 'o'], 'Open the focused card'],
   [['Esc'], 'Clear the focus'],
   [['r'], 'Reshuffle'],
