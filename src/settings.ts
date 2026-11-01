@@ -338,7 +338,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     const feed = this.plugin.data.settings;
     const id = feed.id;
     Object.assign(feed, {
-      name: DEFAULT_SETTINGS.name,
+      name: 'Doomscroll',
       includeMediaOnlyNotes: DEFAULT_SETTINGS.includeMediaOnlyNotes,
       showNonMarkdownFiles: DEFAULT_SETTINGS.showNonMarkdownFiles,
       simplifiedView: DEFAULT_SETTINGS.simplifiedView,

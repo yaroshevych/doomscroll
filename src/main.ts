@@ -74,10 +74,7 @@ export default class DoomscrollPlugin extends Plugin {
     if (!loadedSettings || typeof loadedSettings.name !== 'string') {
       migrated = true;
     }
-    if (
-      this.data.settings.name === 'Doomscroll' ||
-      this.data.settings.name === 'Doom Scroll'
-    ) {
+    if (this.data.settings.name === 'Doom Scroll') {
       this.data.settings.name = 'Default feed';
       migrated = true;
     }
