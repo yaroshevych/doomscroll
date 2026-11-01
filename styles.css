@@ -512,18 +512,6 @@
   margin-top: 1rem;
 }
 
-.doomscroll-feeds-group {
-  margin-top: var(--size-4-8);
-  padding: 0;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  background: var(--background-secondary);
-}
-
-.doomscroll-feeds-group .setting-item-heading {
-  padding: var(--setting-items-padding-y) var(--setting-items-padding-x) 0;
-}
-
 .doomscroll-add-feed .setting-item-info {
   display: none;
 }
@@ -536,14 +524,6 @@
   color: var(--text-muted);
   font-size: var(--font-ui-small);
   font-weight: var(--font-normal);
-}
-
-.doomscroll-feed-filters {
-  margin: 1rem 0;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  background: var(--background-secondary);
 }
 
 .doomscroll-feed-options {
