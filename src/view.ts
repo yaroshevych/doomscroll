@@ -4,6 +4,7 @@ import {
   EventRef,
   Events,
   MarkdownRenderer,
+  Menu,
   Platform,
   Scope,
   WorkspaceLeaf,
@@ -101,7 +102,6 @@ export class DoomscrollView extends ItemView {
   private imageLoadListeners = new WeakSet<HTMLImageElement>();
   batchHistory: NotePreview[][] = [];
   batchHistoryCursor: number = -1;
-  backButton: HTMLButtonElement | null = null;
   private refreshStatusEl: HTMLElement | null = null;
   private isRefreshing = false;
   private pendingSettingsRefresh = false;
@@ -718,25 +718,52 @@ export class DoomscrollView extends ItemView {
       void this.showNewBatch();
     });
 
-    // Previous batch button
-    this.backButton = controls.createEl('button');
-    this.backButton.className = 'doomscroll-back-btn';
-    this.backButton.setAttribute('aria-label', 'Previous card set');
-    setIcon(this.backButton, 'arrow-left');
-    this.backButton.addEventListener('click', () => {
-      void this.showPreviousBatch();
-    });
-    this.updateBackButton();
-
     // Settings button
     const settingsBtn = controls.createEl('button');
     settingsBtn.className = 'doomscroll-settings-btn';
-    settingsBtn.setAttribute('aria-label', 'Settings');
-    setIcon(settingsBtn, 'settings');
+    settingsBtn.setAttribute('aria-label', 'Choose feed or open settings');
+    setIcon(settingsBtn, 'chevron-down');
     settingsBtn.addEventListener('click', () => {
-      const { setting } = this.plugin.app as unknown as AppWithSettings;
-      setting.open();
-      setting.openTabById('doomscroll');
+      const menu = new Menu().setUseNativeMenu(false);
+      const feeds = [
+        { id: 'default', filters: this.plugin.data.settings },
+        ...this.plugin.data.settings.additionalFeeds.map((filters) => ({ id: filters.id, filters })),
+      ];
+      for (const feed of feeds) {
+        menu.addItem((item) => {
+          item.setTitle(feed.filters.name.trim() || 'Untitled feed');
+          item.setChecked(feed.filters === this.getActiveFeedFilters());
+          item.onClick(() => { void this.activateFeed(feed.id); });
+        });
+      }
+      menu.addSeparator();
+      const canUndoRefresh = this.batchHistoryCursor >= 0 && this.batchHistoryCursor < this.batchHistory.length - 1;
+      menu.addItem((item) => item
+        .setTitle('Undo refresh')
+        .setDisabled(!canUndoRefresh)
+        .onClick(() => { void this.showPreviousBatch(); })
+      );
+      menu.addSeparator();
+      menu.addItem((item) => item.setTitle('Settings').onClick(() => {
+        const { setting } = this.plugin.app as unknown as AppWithSettings;
+        setting.open();
+        setting.openTabById('doomscroll');
+      }));
+      const buttonRect = settingsBtn.getBoundingClientRect();
+      const centerX = buttonRect.left + buttonRect.width / 2;
+      const top = buttonRect.bottom + 8;
+      menu.showAtPosition({ x: centerX, y: top });
+      window.setTimeout(() => {
+        const menuEl = (menu as unknown as { dom: HTMLElement }).dom;
+        if (!menuEl?.isConnected) return;
+        const margin = 8;
+        const left = Math.max(
+          margin,
+          Math.min(centerX - menuEl.offsetWidth / 2, window.innerWidth - menuEl.offsetWidth - margin)
+        );
+        menuEl.style.left = `${left}px`;
+        menuEl.style.top = `${top}px`;
+      }, 0);
     });
 
     // Refresh on every plugin session so a persisted index cannot outlive the
@@ -908,7 +935,6 @@ export class DoomscrollView extends ItemView {
     this.renderedSimplifiedView = this.isSimplifiedView();
     this.renderedPreviewSize = this.getPreviewSize();
     this.renderedFrontmatterPropertiesKey = this.getFrontmatterPropertiesKey();
-    this.updateBackButton();
 
     // Stop observing cards from the previous batch before replacing them.
     this.cardObserver?.disconnect();
@@ -1151,14 +1177,6 @@ export class DoomscrollView extends ItemView {
     this.currentBatch = previousBatch;
     this.renderBatch();
     this.getFeedScrollElement()?.scrollTo({ top: 0 });
-  }
-
-  private updateBackButton(): void {
-    if (this.backButton) {
-      this.backButton.disabled =
-        this.batchHistoryCursor < 0 ||
-        this.batchHistoryCursor >= this.batchHistory.length - 1;
-    }
   }
 
   private renderBatch(previousOrder?: readonly string[]): void {
@@ -1737,7 +1755,6 @@ export class DoomscrollView extends ItemView {
       }
     }
 
-    this.updateBackButton();
     await this.plugin.saveSettings();
   }
 
