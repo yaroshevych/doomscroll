@@ -521,26 +521,26 @@
 
 .doomscroll-feed-filters textarea,
 .doomscroll-feed-option textarea,
-.doomscroll-frontmatter-editor textarea {
+.doomscroll-large-text-editor textarea {
   min-height: 7em;
   width: 20em;
   max-width: 100%;
 }
 
-.doomscroll-frontmatter-editor,
+.doomscroll-large-text-editor,
 .doomscroll-search-query {
   flex-direction: column;
 }
 
-.doomscroll-frontmatter-editor .setting-item-control,
-.doomscroll-frontmatter-editor textarea,
+.doomscroll-large-text-editor .setting-item-control,
+.doomscroll-large-text-editor textarea,
 .doomscroll-search-query .setting-item-control,
 .doomscroll-search-query input {
   width: 100%;
   max-width: none;
 }
 
-.doomscroll-frontmatter-editor textarea {
+.doomscroll-large-text-editor textarea {
   min-height: 14em;
 }
 

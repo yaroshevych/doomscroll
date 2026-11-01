@@ -106,6 +106,29 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  openDebugFeedPage(feedId: string): boolean {
+    if (!this.containerEl.isConnected || !this.containerEl.isShown()) return false;
+    const feed = this.plugin.getFeedFilters(feedId);
+    if (!requireApiVersion('1.13.0')) {
+      this.legacyFeed = feed;
+      this.display();
+      return true;
+    }
+    const feeds = [this.plugin.data.settings, ...this.plugin.data.settings.additionalFeeds];
+    const index = feeds.indexOf(feed);
+    const group = this.getSettingDefinitions().find((item) =>
+      'type' in item && item.type === 'group' && item.items?.some((entry) => 'type' in entry && entry.type === 'page')
+    );
+    if (!group || !('items' in group) || !group.items || index < 0) return false;
+    const pages = group.items.filter((entry) => 'type' in entry && entry.type === 'page');
+    const page = pages[index];
+    if (!page || !('name' in page)) return false;
+    const setting = (this.app as unknown as { setting: { openPagePath?: (tab: string, path: string[]) => void } }).setting;
+    if (!setting.openPagePath) return false;
+    setting.openPagePath('doomscroll', [page.name]);
+    return true;
+  }
+
   getSettingDefinitions(): SettingDefinitionItem[] {
     const definitions: SettingDefinitionItem[] = [
       {
@@ -114,8 +137,8 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         control: { type: 'toggle', key: 'infiniteScroll' },
       },
       {
-        name: 'Batch size',
-        desc: 'Number of cards to show per reshuffle. Does not apply while infinite scrolling is enabled.',
+        name: 'Page size',
+        desc: 'Number of cards to show per reshuffle. Does not apply when infinite scrolling is enabled',
         control: {
           type: 'dropdown',
           key: 'batchSize',
@@ -130,7 +153,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       },
       {
         name: 'Reduce animation',
-        desc: 'Disable card and scrolling animations during keyboard navigation',
+        desc: 'Disable animations when navigating with keyboard',
         control: { type: 'toggle', key: 'reduceAnimations' },
       },
     ];
@@ -196,7 +219,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             this.openPageNames.set(filters.id, pageName);
             setting
               .setName('Name')
-              .setDesc('This name appears in the interface and in the Obsidian command palette.')
               .addText((text) =>
                 text
                   .setValue(filters.name)
@@ -215,7 +237,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             setting
               .setClass('doomscroll-search-query')
               .setName('Search query')
-              .setDesc('Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]')
+              .setDesc('Use Obsidian search syntax, such as tag:#work or [status:Draft]. Refine your query in Search sidebar, then copy it here')
               .addText((text) =>
                 text
                   .setPlaceholder('tag:#work [status:Draft]')
@@ -231,13 +253,13 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         {
           type: 'page',
           name: 'Frontmatter',
-          desc: 'Choose which frontmatter properties provide images and appear before or after note previews.',
+          desc: 'Choose which note properties to render in previews',
           items: [{
             type: 'group',
             items: this.createFrontmatterOptions(filters).map((option) => ({
               name: option.name,
               render: (setting: Setting) => {
-                setting.setClass('doomscroll-frontmatter-editor');
+                setting.setClass('doomscroll-large-text-editor');
                 option.render(setting);
               },
             })),
@@ -246,16 +268,18 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         {
           type: 'page',
           name: 'Exclusions',
-          desc: 'Exclude notes by tag, filename pattern, or folder.',
+          desc: 'Exclude notes by tag, filename pattern, or folder',
           items: [{ type: 'group', cls: 'doomscroll-feed-filters', items: [
         {
           name: 'Exclude tags',
           render: (setting) => {
             setting
+              .setClass('doomscroll-large-text-editor')
               .setName('Exclude tags')
               .setDesc('Tags to skip without # (one per line)')
               .addTextArea((text) =>
                 text
+                  .setPlaceholder('archive\nprivate\nignore')
                   .setValue(filters.excludeTags.join('\n'))
                   .onChange(async (value) => {
                     filters.excludeTags = parseLines(value);
@@ -268,10 +292,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           name: 'Exclude filename patterns',
           render: (setting) => {
             setting
+              .setClass('doomscroll-large-text-editor')
               .setName('Exclude filename patterns')
               .setDesc('Filename patterns to skip (one per line, e.g., _*)')
               .addTextArea((text) =>
                 text
+                  .setPlaceholder('_*\nDraft*\nMOC*')
                   .setValue(filters.excludeGlobs.join('\n'))
                   .onChange(async (value) => {
                     filters.excludeGlobs = parseLines(value);
@@ -625,7 +651,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     }
     if (this.legacyFrontmatter) {
       for (const option of this.createFrontmatterOptions(feed)) {
-        option.render(new Setting(containerEl).setClass('doomscroll-frontmatter-editor'));
+        option.render(new Setting(containerEl).setClass('doomscroll-large-text-editor'));
       }
       return;
     }
@@ -678,7 +704,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         render: (setting) => {
           setting
       .setName('Show non-Markdown files')
-      .setDesc('Show standalone vault files such as images, PDFs, and other attachments')
+      .setDesc('Show standalone files such as images or PDFs, which are not referenced in any note')
       .addToggle((toggle) =>
         toggle
           .setValue(filters.showNonMarkdownFiles)
@@ -695,7 +721,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           setting
       .setName('Simplified view')
       .setDesc(
-        'Show concise previews with readable tables, links, and code; turn off for full Markdown formatting.'
+        'Show concise previews without full Markdown formatting'
       )
       .addToggle((toggle) =>
         toggle
@@ -712,7 +738,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         render: (setting) => {
           setting
       .setName('Preview size')
-      .setDesc('How many lines of note text to show on each card')
+      .setDesc('How many lines of note text to show')
       .addDropdown((dropdown) =>
         dropdown
           .addOptions({
@@ -734,7 +760,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         render: (setting) => {
           setting
       .setName('Open notes in')
-      .setDesc('Choose where a card opens')
       .addDropdown((dropdown) =>
         dropdown
           .addOptions({
@@ -764,7 +789,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           setting
       .setName('Frontmatter image properties')
       .setDesc(
-        'Property names to check for images in frontmatter (one per line)'
+        'Property names to check for images in frontmatter (one per line). These images will be rendered in previews'
       )
       .addTextArea((text) =>
         text
@@ -833,8 +858,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     const feedGroup = containerEl.createDiv('doomscroll-feed-filters');
 
     const nameSetting = new Setting(feedGroup)
-      .setName('Name')
-      .setDesc('This name appears in the interface and in the Obsidian command palette.')
+      .setName('Feed name')
       .addText((text) =>
         text.setValue(filters.name).onChange(async (value) => {
           filters.name = value;
@@ -850,7 +874,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       .setClass('doomscroll-search-query')
       .setName('Search query')
       .setDesc(
-        'Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]'
+        'Use Obsidian search syntax, such as tag:#work or [status:Draft]'
       )
       .addText((text) =>
         text
@@ -867,6 +891,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   private renderLegacyExclusions(containerEl: HTMLElement, filters: FeedFilters): void {
     const feedGroup = containerEl.createDiv('doomscroll-feed-filters');
     new Setting(feedGroup)
+      .setClass('doomscroll-large-text-editor')
       .setName('Exclude tags')
       .setDesc('Tags to skip without # (one per line)')
       .addTextArea((text) =>
@@ -879,6 +904,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       );
 
     new Setting(feedGroup)
+      .setClass('doomscroll-large-text-editor')
       .setName('Exclude filename patterns')
       .setDesc('Filename patterns to skip (one per line, e.g., _*)')
       .addTextArea((text) =>
@@ -949,7 +975,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
 }
 
-const FEEDS_DESCRIPTION = 'You start with one default feed, which you can rename and configure. You can also add more feeds.';
+const FEEDS_DESCRIPTION = 'Doomscroll start with one default feed, which you can rename and configure. Add more feeds with custom content filters and preview settings. For example: custom feeds for journal and books notes.';
 
 function configureGitHubLinks(setting: Setting): void {
   setting
