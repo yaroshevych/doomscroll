@@ -37,6 +37,11 @@ export default class DoomscrollPlugin extends Plugin {
     const hasAfterProps = Array.isArray(loadedSettings?.frontmatterAfterProps);
     const settings = {
       ...DEFAULT_SETTINGS,
+      excludeFolders: [...DEFAULT_SETTINGS.excludeFolders],
+      excludeTags: [...DEFAULT_SETTINGS.excludeTags],
+      excludeGlobs: [...DEFAULT_SETTINGS.excludeGlobs],
+      frontmatterImageProps: [...DEFAULT_SETTINGS.frontmatterImageProps],
+      additionalFeeds: [...DEFAULT_SETTINGS.additionalFeeds],
       ...loadedSettings,
       frontmatterBeforeProps: hasBeforeProps
         ? loadedSettings?.frontmatterBeforeProps ?? []

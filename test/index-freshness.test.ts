@@ -23,6 +23,25 @@ const bundle = await build({
 });
 const { default: Plugin } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0]!.contents).toString('base64')}`);
 
+test('reset clears folders added during a fresh installation', async () => {
+  (globalThis as any).window = { setTimeout, clearTimeout };
+  const app = {
+    workspace: { getLeavesOfType: () => [] },
+    vault: { on: () => {} }, metadataCache: { on: () => {} },
+  };
+  const plugin = new Plugin(app);
+  await plugin.onload();
+  plugin.data.settings.excludeFolders.push('Archive');
+  plugin.data.settings.additionalFeeds.push({ id: 'feed', name: 'Feed' });
+  await plugin.settingTab.resetDefaultFeed();
+  assert.deepEqual(plugin.data.settings.excludeFolders, []);
+  const fresh = new Plugin(app);
+  await fresh.onload();
+  assert.deepEqual(fresh.data.settings.excludeFolders, []);
+  assert.deepEqual(fresh.data.settings.additionalFeeds, []);
+  clearTimeout(plugin.settingsRefreshTimer);
+});
+
 test('resetting the default feed rebuilds cached images using default properties', async () => {
   (globalThis as any).window = { setTimeout, clearTimeout };
   const file = { path: 'Note.md', extension: 'md', stat: { mtime: 1 } };
