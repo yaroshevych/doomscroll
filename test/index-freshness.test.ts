@@ -3,12 +3,16 @@ import { strict as assert } from 'node:assert';
 import { build } from 'esbuild';
 
 const bundle = await build({
-  entryPoints: ['src/main.ts'], bundle: true, write: false, platform: 'node', format: 'esm',
+  stdin: { contents: "export { default } from './main.ts'; export { DoomscrollView } from './view';", resolveDir: `${process.cwd()}/src`, loader: 'ts' },
+  bundle: true, write: false, platform: 'node', format: 'esm',
   define: { __DEBUG__: 'false' },
   plugins: [{ name: 'host', setup(build) {
     build.onResolve({ filter: /^(obsidian|\.\/view)$/ }, (args) => ({ path: args.path, namespace: 'host' }));
     build.onLoad({ filter: /.*/, namespace: 'host' }, ({ path }) => ({ contents: path === './view'
-      ? "export class DoomscrollView {}; export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view'"
+      ? `export class DoomscrollView {
+           constructor(indexer, data) { this.indexer = indexer; this.data = data; this.paths = []; }
+           refreshForCurrentSettings() { return this.pending = this.indexer.refreshIfStale().then(changed => { if (changed) this.paths = Object.keys(this.data.previews); }); }
+         }; export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view'`
       : `export class Plugin {
            constructor(app) { this.app = app; }
            async loadData() { return null; } async saveData() {}
@@ -21,7 +25,7 @@ const bundle = await build({
     }));
   } }],
 });
-const { default: Plugin } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0]!.contents).toString('base64')}`);
+const { default: Plugin, DoomscrollView } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0]!.contents).toString('base64')}`);
 
 test('reset clears folders added during a fresh installation', async () => {
   (globalThis as any).window = { setTimeout, clearTimeout };
@@ -124,4 +128,33 @@ test('renaming a file invalidates its old path and keeps its reading history', a
   file.path = 'Moved';
   listeners.rename!(file, 'Notes');
   assert.equal(plugin.data.history[0].path, 'Moved/New.md');
+});
+
+test('a rename redraws both views sharing a feed index', async () => {
+  (globalThis as any).window = { setTimeout };
+  const file = { path: 'Old.md', extension: 'md', stat: { mtime: 1 } };
+  const listeners: Record<string, (...args: any[]) => void> = {};
+  const leaves: { view: any }[] = [];
+  const app = {
+    workspace: { getLeavesOfType: () => leaves },
+    vault: {
+      on: (event: string, callback: (...args: any[]) => void) => { listeners[event] = callback; },
+      getFiles: () => [file], cachedRead: async () => 'note',
+    },
+    metadataCache: { on: () => {}, getFileCache: () => ({}) },
+  };
+  const plugin = new Plugin(app);
+  await plugin.onload();
+  plugin.data.settings.showNonMarkdownFiles = false;
+  await plugin.indexer.refreshIfStale();
+  const first = new DoomscrollView(plugin.indexer, plugin.data);
+  const second = new DoomscrollView(plugin.indexer, plugin.data);
+  first.paths = second.paths = ['Old.md'];
+  leaves.push({ view: first }, { view: second });
+
+  file.path = 'New.md';
+  listeners.rename!(file, 'Old.md');
+  await Promise.all([first.pending, second.pending]);
+  assert.deepEqual(first.paths, ['New.md']);
+  assert.deepEqual(second.paths, ['New.md']);
 });

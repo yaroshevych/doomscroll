@@ -37,8 +37,10 @@ export class Indexer {
     const runningRefresh = this.refreshPromises.get(feedId);
     if (runningRefresh) {
       await runningRefresh;
-      // The caller waited for another refresh; it did not start one itself.
-      return false;
+      // A waiting view must redraw too. Recheck in case the index was marked
+      // dirty or its filters changed while the first refresh was running.
+      await this.refreshIfStale(onProgress, false, filters, feedId);
+      return true;
     }
 
     const settingsKey = this.getIndexSettingsKey(filters);
