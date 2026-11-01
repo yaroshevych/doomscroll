@@ -74,6 +74,20 @@ class DeleteFeedModal extends Modal {
   }
 }
 
+class ResetFeedModal extends Modal {
+  constructor(app: App, private onConfirm: () => void) { super(app); }
+  onOpen(): void {
+    this.titleEl.setText('Reset feed to defaults?');
+    this.contentEl.createEl('p', { text: 'This will replace this feed’s name, filters, and display options with their default values.' });
+    new Setting(this.contentEl)
+      .addButton((button) => button.setButtonText('Cancel').onClick(() => this.close()))
+      .addButton((button) => button.setButtonText('Reset to defaults').setWarning().onClick(() => {
+        this.close();
+        this.onConfirm();
+      }));
+  }
+}
+
 class AddExcludedFolderModal extends Modal {
   constructor(app: App, private tab: DoomscrollSettingTab, private filters: FeedFilters) { super(app); }
   onOpen(): void {
@@ -170,15 +184,18 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       while (usedNames.has(name)) name = `${base} (${suffix++})`;
       usedNames.add(name);
       const group = this.createFeedDefinition(fallback, feed, name);
-      feedItems.push({ type: 'page', name, items: [group, ...(feed === this.plugin.data.settings ? [] : [{
-        name: 'Delete feed',
-        render: (setting: Setting) => { setting.setName('Delete feed').addButton((button) =>
-          button.setButtonText('Delete feed').setWarning().onClick(() => {
-            const page = setting.settingEl.closest('.setting-page');
-            this.confirmDeleteFeed(feed, page);
-          })
-        ); },
-      }])] });
+      const pageActions: SettingGroupItem[] = feed === this.plugin.data.settings
+        ? [{ name: 'Reset action', render: (setting: Setting) => {
+            setting.setName('').addButton((button) => button
+              .setButtonText('Reset to defaults').setWarning()
+              .onClick(() => new ResetFeedModal(this.app, () => { void this.resetDefaultFeed(); }).open()));
+          } }]
+        : [{ name: 'Delete action', render: (setting: Setting) => {
+            setting.setName('').addButton((button) => button
+              .setButtonText('Delete feed').setWarning()
+              .onClick(() => this.confirmDeleteFeed(feed, setting.settingEl.closest('.setting-page'))));
+          } }];
+      feedItems.push({ type: 'page', name, items: [group, ...pageActions] });
     };
     addFeedPage('Default feed', this.plugin.data.settings);
     this.plugin.data.settings.additionalFeeds.forEach((feed, index) => {
@@ -315,6 +332,30 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
   private async saveFeedSettings(filters: FeedFilters): Promise<void> {
     await this.plugin.saveSettingsAndRefreshViews();
+  }
+
+  private async resetDefaultFeed(): Promise<void> {
+    const feed = this.plugin.data.settings;
+    const id = feed.id;
+    Object.assign(feed, {
+      name: DEFAULT_SETTINGS.name,
+      includeMediaOnlyNotes: DEFAULT_SETTINGS.includeMediaOnlyNotes,
+      showNonMarkdownFiles: DEFAULT_SETTINGS.showNonMarkdownFiles,
+      simplifiedView: DEFAULT_SETTINGS.simplifiedView,
+      previewSize: DEFAULT_SETTINGS.previewSize,
+      openNoteBehavior: DEFAULT_SETTINGS.openNoteBehavior,
+      frontmatterImageProps: [...DEFAULT_SETTINGS.frontmatterImageProps],
+      frontmatterBeforeProps: [...DEFAULT_SETTINGS.frontmatterBeforeProps],
+      frontmatterAfterProps: [...DEFAULT_SETTINGS.frontmatterAfterProps],
+      searchQuery: DEFAULT_SETTINGS.searchQuery,
+      excludeTags: [...DEFAULT_SETTINGS.excludeTags],
+      excludeGlobs: [...DEFAULT_SETTINGS.excludeGlobs],
+      excludeFolders: [...DEFAULT_SETTINGS.excludeFolders],
+      id,
+    });
+    await this.saveFeedSettings(feed);
+    this.plugin.refreshFeedCommands();
+    this.update();
   }
 
   async saveExcludedFolders(filters: FeedFilters): Promise<void> {
