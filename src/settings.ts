@@ -8,6 +8,7 @@ import {
   Platform,
   requireApiVersion,
   Setting,
+  type SettingDefinitionList,
   type SettingDefinitionItem,
   type SettingGroupItem,
 } from 'obsidian';
@@ -50,7 +51,7 @@ class FolderSuggest extends AbstractInputSuggest<string> {
   }
 
   selectSuggestion(path: string): void {
-    this.inputEl.value = path;
+    this.setValue(path);
     this.close();
   }
 }
@@ -70,6 +71,29 @@ class DeleteFeedModal extends Modal {
       .addButton((button) => button.setButtonText('Delete feed').setWarning().onClick(() => {
         this.close();
         this.onConfirm();
+      }));
+  }
+}
+
+class AddExcludedFolderModal extends Modal {
+  constructor(app: App, private tab: DoomscrollSettingTab, private filters: FeedFilters) { super(app); }
+  onOpen(): void {
+    this.titleEl.setText('Add excluded folder');
+    let inputEl: HTMLInputElement;
+    new Setting(this.contentEl).setName('').setDesc('Select a folder from suggestions, or type or paste its path')
+      .setClass('doomscroll-folder-picker-input doomscroll-folder-picker-field').addText((text) => {
+      text.setPlaceholder('4. Archive');
+      inputEl = text.inputEl;
+      new FolderSuggest(this.app, inputEl);
+    });
+    new Setting(this.contentEl).addButton((button) => button.setButtonText('Cancel').onClick(() => this.close()))
+      .addButton((button) => button.setButtonText('Add').setCta().onClick(async () => {
+        const folder = normalizeFolderPath(inputEl.value);
+        if (!folder || folder === '.') { new Notice('Excluded folder path cannot be empty or the vault root'); return; }
+        if (this.filters.excludeFolders.includes(folder)) { new Notice('That folder is already excluded'); return; }
+        this.filters.excludeFolders.push(folder);
+        await this.tab.saveExcludedFolders(this.filters);
+        this.close();
       }));
   }
 }
@@ -308,49 +332,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               );
           },
         },
-        {
-          name: 'Excluded folders',
-          render: (setting) => {
-            setting.setName('Excluded folders').setHeading();
-            const list = setting.infoEl.createDiv(
-              'doomscroll-excluded-folders-list'
-            );
-            this.renderExcludedFolders(list, filters);
-          },
-        },
-        {
-          name: 'Add excluded folder',
-          render: (setting) => {
-            setting
-              .setName('Add excluded folder')
-              .setDesc('Folders to exclude from this feed');
-            let inputEl: HTMLInputElement | null = null;
-            setting.addText((text) => {
-              text.setPlaceholder('4. Archive');
-              inputEl = text.inputEl;
-              new FolderSuggest(this.app, inputEl);
-            });
-            setting.addButton((button) =>
-              button.setButtonText('Add').onClick(() => {
-                const folder = normalizeFolderPath(inputEl?.value ?? '');
-                if (!folder || folder === '.') {
-                  new Notice('Excluded folder path cannot be empty or the vault root');
-                  return;
-                }
-                if (filters.excludeFolders.includes(folder)) {
-                  new Notice('That folder is already excluded');
-                  return;
-                }
-                filters.excludeFolders.push(folder);
-                void this.saveFeedSettings(filters).then(() => {
-                  if (inputEl) inputEl.value = '';
-                  this.refreshDeclarativeSettings();
-                });
-              })
-            );
-          },
-        },
-          ] }],
+          ] }, this.createExcludedFoldersGroup(filters)],
         },
       ],
     };
@@ -358,6 +340,30 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
   private async saveFeedSettings(filters: FeedFilters): Promise<void> {
     await this.plugin.saveSettingsAndRefreshViews();
+  }
+
+  async saveExcludedFolders(filters: FeedFilters): Promise<void> {
+    await this.saveFeedSettings(filters);
+    this.update();
+  }
+
+  private createExcludedFoldersGroup(filters: FeedFilters): SettingGroupItem {
+    return {
+      type: 'list',
+      heading: 'Excluded folders',
+      emptyState: 'No excluded folders',
+      searchable: false,
+      items: filters.excludeFolders.map((folder) => ({ name: folder, searchable: false })),
+      addItem: {
+        name: 'Add folder',
+        action: () => { new AddExcludedFolderModal(this.app, this, filters).open(); },
+      },
+      onDelete: async (index) => {
+        filters.excludeFolders.splice(index, 1);
+        await this.saveFeedSettings(filters);
+        this.update();
+      },
+    } satisfies SettingDefinitionList;
   }
 
   private refreshFeedNameAfterLeavingPage(settingEl: HTMLElement, feedId: string): void {
@@ -918,10 +924,11 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           })
       );
 
-    new Setting(feedGroup).setName('Excluded folders').setHeading();
-    const excludedFoldersList = feedGroup.createDiv(
-      'doomscroll-excluded-folders-list'
-    );
+    const folderSetting = new Setting(feedGroup)
+      .setName('Excluded folders')
+      .setDesc('Folders excluded from this feed');
+    const panel = folderSetting.settingEl.createDiv('doomscroll-excluded-folders-panel');
+    const excludedFoldersList = panel.createDiv('doomscroll-excluded-folders-list');
     this.renderExcludedFolders(excludedFoldersList, filters);
 
     let folderInputEl: HTMLInputElement;
@@ -961,17 +968,14 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     }
 
     for (const folder of filters.excludeFolders) {
-      const row = container.createDiv('doomscroll-excluded-folder-item');
-      row.createSpan({ text: folder });
-      row
-        .createEl('button', {
-          text: '×',
-          cls: 'doomscroll-excluded-folder-remove',
-          attr: { 'aria-label': `Remove excluded folder ${folder}` },
-        })
-        .addEventListener('click', () => {
-          void this.removeExcludedFolder(folder, container, filters);
-        });
+      new Setting(container)
+        .setName(folder)
+        .addButton((button) => button
+          .setIcon('trash-2')
+          .setTooltip(`Remove excluded folder ${folder}`)
+          .setWarning()
+          .onClick(() => { void this.removeExcludedFolder(folder, container, filters); })
+        );
     }
   }
 

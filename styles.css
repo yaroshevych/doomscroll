@@ -557,22 +557,23 @@
   overflow: hidden;
 }
 
-.doomscroll-excluded-folder-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  min-height: 3rem;
-  padding: 0.5rem 0.75rem 0.5rem 1rem;
-  border-bottom: 1px solid var(--background-modifier-border);
+.doomscroll-excluded-folders-panel {
+  margin-block: var(--size-4-4);
 }
 
-.doomscroll-excluded-folder-item:last-child {
-  border-bottom: none;
+.doomscroll-folder-picker-input .setting-item-control,
+.doomscroll-folder-picker-input input {
+  width: 100%;
+  max-width: none;
 }
 
-.doomscroll-excluded-folder-remove {
-  flex-shrink: 0;
+.doomscroll-folder-picker-field {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.doomscroll-folder-picker-field .setting-item-info {
+  width: 100%;
 }
 
 .doomscroll-reshuffle-section {
