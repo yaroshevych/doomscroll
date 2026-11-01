@@ -12,10 +12,10 @@ const bundle = await build({
       : `export class Plugin {
            constructor(app) { this.app = app; }
            async loadData() { return null; } async saveData() {}
-           registerView() {} registerEvent() {} addRibbonIcon() {} addSettingTab() {}
-           addCommand(command) { return command; }
+           registerView() {} registerEvent() {} addRibbonIcon() {} addSettingTab(tab) { this.settingTab = tab; }
+           addCommand(command) { return command; } removeCommand() {}
          }
-         export class PluginSettingTab {} export class AbstractInputSuggest {} export class Modal {}
+         export class PluginSettingTab { update() {} } export class AbstractInputSuggest {} export class Modal {}
          export class Notice {} export class Setting {} export class TFile {}
          export const Platform = {}; export function normalizePath(path) { return path; }`,
     }));
@@ -23,6 +23,31 @@ const bundle = await build({
 });
 const { default: Plugin } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0]!.contents).toString('base64')}`);
 
+test('resetting the default feed rebuilds cached images using default properties', async () => {
+  (globalThis as any).window = { setTimeout, clearTimeout };
+  const file = { path: 'Note.md', extension: 'md', stat: { mtime: 1 } };
+  const app = {
+    workspace: { getLeavesOfType: () => [] },
+    vault: { getFiles: () => [file], cachedRead: async () => 'note' },
+    metadataCache: {
+      on: () => {},
+      getFileCache: () => ({ frontmatter: { custom: 'old.png', cover: 'new.png' } }),
+    },
+  };
+  const plugin = new Plugin(app);
+  await plugin.onload();
+  plugin.data.settings.showNonMarkdownFiles = false;
+  plugin.data.settings.frontmatterImageProps = ['custom'];
+  await plugin.indexer.refreshIfStale();
+  assert.equal(plugin.data.previews['Note.md'].imagePath, 'old.png');
+
+  await plugin.settingTab.resetDefaultFeed();
+  // Avoid attachment link lookup in the host stub; it does not affect image extraction.
+  plugin.data.settings.showNonMarkdownFiles = false;
+  await plugin.indexer.refreshIfStale();
+  assert.equal(plugin.data.previews['Note.md'].imagePath, 'new.png');
+  clearTimeout(plugin.settingsRefreshTimer);
+});
 test('a metadata change causes the next refresh to update feed membership', async () => {
   (globalThis as any).window = { setTimeout };
   const file = { path: 'Note.md', extension: 'md', stat: { mtime: 1 } };

@@ -353,6 +353,9 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       excludeFolders: [...DEFAULT_SETTINGS.excludeFolders],
       id,
     });
+    for (const preview of Object.values(this.plugin.getFeedPreviews('default'))) {
+      preview.mtime = 0;
+    }
     await this.saveFeedSettings(feed);
     this.plugin.refreshFeedCommands();
     this.update();
