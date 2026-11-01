@@ -522,7 +522,8 @@
 .doomscroll-feed-filters textarea,
 .doomscroll-feed-option textarea,
 .doomscroll-large-text-editor textarea {
-  min-height: 7em;
+  height: 6em;
+  min-height: 6em;
   width: 20em;
   max-width: 100%;
 }
@@ -538,10 +539,6 @@
 .doomscroll-search-query input {
   width: 100%;
   max-width: none;
-}
-
-.doomscroll-large-text-editor textarea {
-  min-height: 14em;
 }
 
 .is-mobile .doomscroll-feed-filters .setting-item-control:has(textarea),
