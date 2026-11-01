@@ -211,6 +211,24 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         },
         ...this.createFeedOptions(filters),
         {
+          name: 'Search query',
+          render: (setting) => {
+            setting
+              .setClass('doomscroll-search-query')
+              .setName('Search query')
+              .setDesc('Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]')
+              .addText((text) =>
+                text
+                  .setPlaceholder('tag:#work [status:Draft]')
+                  .setValue(filters.searchQuery)
+                  .onChange(async (value) => {
+                    filters.searchQuery = value;
+                    await this.saveFeedSettings(filters);
+                  })
+              );
+          },
+        },
+        {
           type: 'page',
           name: 'Frontmatter',
           desc: 'Choose which frontmatter properties provide images and appear before or after note previews.',
@@ -224,23 +242,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               },
             })),
           }],
-        },
-        {
-          name: 'Search query',
-          render: (setting) => {
-            setting
-              .setName('Search query')
-              .setDesc('Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]')
-              .addText((text) =>
-                text
-                  .setPlaceholder('tag:#work [status:Draft]')
-                  .setValue(filters.searchQuery)
-                  .onChange(async (value) => {
-                    filters.searchQuery = value;
-                    await this.saveFeedSettings(filters);
-                  })
-              );
-          },
         },
         {
           name: 'Exclude tags',
@@ -829,6 +830,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     });
 
     new Setting(feedGroup)
+      .setClass('doomscroll-search-query')
       .setName('Search query')
       .setDesc(
         'Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]'

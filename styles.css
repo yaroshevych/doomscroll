@@ -527,12 +527,15 @@
   max-width: 100%;
 }
 
-.doomscroll-frontmatter-editor {
+.doomscroll-frontmatter-editor,
+.doomscroll-search-query {
   flex-direction: column;
 }
 
 .doomscroll-frontmatter-editor .setting-item-control,
-.doomscroll-frontmatter-editor textarea {
+.doomscroll-frontmatter-editor textarea,
+.doomscroll-search-query .setting-item-control,
+.doomscroll-search-query input {
   width: 100%;
   max-width: none;
 }
