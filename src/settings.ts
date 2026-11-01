@@ -1,6 +1,7 @@
 import {
   AbstractInputSuggest,
   App,
+  Modal,
   Notice,
   normalizePath,
   PluginSettingTab,
@@ -49,6 +50,25 @@ class FolderSuggest extends AbstractInputSuggest<string> {
   selectSuggestion(path: string): void {
     this.inputEl.value = path;
     this.close();
+  }
+}
+
+class DeleteFeedModal extends Modal {
+  constructor(app: App, private feedName: string, private onConfirm: () => void) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.titleEl.setText('Delete feed?');
+    this.contentEl.createEl('p', {
+      text: `Delete “${this.feedName}”? Your notes will not be deleted.`,
+    });
+    new Setting(this.contentEl)
+      .addButton((button) => button.setButtonText('Cancel').onClick(() => this.close()))
+      .addButton((button) => button.setButtonText('Delete feed').setWarning().onClick(() => {
+        this.close();
+        this.onConfirm();
+      }));
   }
 }
 
@@ -134,7 +154,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       feedItems.push({ type: 'page', name, items: [group, ...(feed === this.plugin.data.settings ? [] : [{
         name: 'Delete feed',
         render: (setting: Setting) => { setting.setName('Delete feed').addButton((button) =>
-          button.setButtonText('Delete feed').setWarning().onClick(() => { void this.deleteFeed(feed); })
+          button.setButtonText('Delete feed').setWarning().onClick(() => {
+            const page = setting.settingEl.closest('.setting-page');
+            this.confirmDeleteFeed(feed, page);
+          })
         ); },
       }])] });
     };
@@ -329,12 +352,18 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     this.refreshDeclarativeSettings();
   }
 
-  private async deleteFeed(feed: FeedFilters): Promise<void> {
+  private confirmDeleteFeed(feed: FeedFilters, page: Element | null): void {
+    new DeleteFeedModal(this.app, feed.name.trim() || 'Untitled feed', () => {
+      void this.deleteFeed(feed, page);
+    }).open();
+  }
+
+  private async deleteFeed(feed: FeedFilters, page: Element | null): Promise<void> {
     const index = this.plugin.data.settings.additionalFeeds.indexOf(feed);
     if (index < 0) return;
     this.legacyFeed = null;
     if (requireApiVersion('1.13.0')) {
-      document.querySelector<HTMLElement>('.setting-page-back-button')?.click();
+      page?.querySelector<HTMLElement>('.setting-page-back-button')?.click();
     }
     await this.plugin.removeAdditionalFeed(index);
     this.refreshDeclarativeSettings();
@@ -576,7 +605,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     this.renderFeedOptions(containerEl, feed);
     if (feed !== this.plugin.data.settings) {
       new Setting(containerEl).setName('Delete feed').addButton((button) =>
-        button.setButtonText('Delete feed').setWarning().onClick(() => { void this.deleteFeed(feed); })
+        button.setButtonText('Delete feed').setWarning().onClick(() => { this.confirmDeleteFeed(feed, null); })
       );
     }
   }
