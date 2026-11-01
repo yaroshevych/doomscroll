@@ -1,94 +1,48 @@
 # Doomscroll
 
-**Doomscroll your own notes.**
+A social-style feed of your own Obsidian notes.
 
-I used to be an engineering manager on Instagram Reels. Now I am using the same
-feed format to scroll through my own notes.
-
-No ranking algorithm, no cloud service, no celebrities. Just notes, web
-snippets, book quotes, and other things already sitting in my Obsidian vault.
-
-## Why
-
-My problem was simple: I write a lot, save a lot, but rarely come back to any of
-it. Jotted notes, diary entries, LLM Wiki pages - all had the same problem. The
-content was great. I just didn't feel like going back to it.
-
-My vault became write-only.
-
-Social apps are very good at resurfacing content. Personal knowledge management
-tools are not. Doomscroll borrows the science behind the social feed and applies
-it to your vault, so you are motivated to engage with your notes.
-
-Same scroll. Your content.
+You write and save a lot. How often do you look at it again? Scroll through
+forgotten notes, reflect on your thoughts, and find new ideas.
 
 <img src="https://github.com/user-attachments/assets/bbb240b2-e7bd-4ee7-af4e-b9f583d74629" height="400px" alt="Doomscroll on mobile" />
 
-## Features
+## Usage
 
-- Shuffled card feed, not another list sorted by modification date
-- Manual reshuffle when the current batch is not doing it for you
-- Optional infinite scrolling that loads more notes as you reach the end
-- At most 20% of each batch is reserved for notes seen in the last seven days,
-  unless there are not enough unseen notes
-- 30-minute cooldown before a note can appear again
-- Back button for the batch you should not have reshuffled
-- Filters for folders, tags, and filename patterns
-- Cover images from frontmatter, Markdown, or HTML
-- Standalone vault attachments, including images that are not linked from a note
-- Markdown previews with an optional Simplified view
-- Lazy image loading
-- Works on desktop and mobile
-- Scroll position survives switching panes
-
-## Installation
-
-1. Clone this repository into your vault's `.obsidian/plugins/` directory:
-   ```
-   git clone https://github.com/yaroshevych/doomscroll .obsidian/plugins/doomscroll
-   ```
-
-2. Navigate to the plugin directory and install dependencies:
-   ```
-   cd .obsidian/plugins/doomscroll
-   npm install
-   ```
-
-3. Build the plugin:
-   ```
-   npm run build
-   ```
-
-4. Enable the plugin in Obsidian settings under **Community plugins**.
+1. Open the feed with the menu item on Mobile, or the "Open feed" command.
+   Scroll through previews of random notes, and click a card to open it.
+2. Create separate feeds, each with its own search and filter options.
+   For example, make one feed for only your Journal folder and another
+   for only your Books folder. Switch feeds from the menu at the top of the feed.
+3. Reshuffle for a fresh set of notes, or turn on infinite scrolling in settings.
+   You can keep multiple feeds open at the same time and rename any feed in
+   settings if you'd prefer a different name to Doomscroll.
+4. Adjust previews in each feed's settings. Choose how much text to show, turn
+   Simplified view off for full note formatting, or show selected note properties.
+   Major plugins like Bases or Dataview supported.
+5. On desktop, use the arrow keys to select a card, Space to preview a note, PDF,
+   or video, and Enter to open it. Find more shortcuts under **Keyboard shortcuts**
+   in Doomscroll settings.
 
 ## Settings
 
-- **Batch size** (5 to 50): How many cards to show per reshuffle (default: 20)
-- **Infinite scrolling**: Load more notes automatically as you reach the end;
-  when enabled, batch size is fixed for incremental loading
-- **Include media-only notes**: Show Markdown notes containing only images or
-  other attachments (default: on)
-- **Show non-Markdown files**: Show standalone vault files such as images,
-  PDFs, and other attachments (default: on)
-- **Simplified view**: Show concise previews with readable tables, links, and
-  code; turn off for full Markdown formatting (default: on)
-- **Preview size**: Show a small, medium, or large text preview (default:
-  medium)
-- **Exclude folders**: Folder paths to skip (one per line)
-- **Exclude tags**: Tag names to skip without # (one per line)
-- **Exclude filename patterns**: Patterns to skip (one per line, e.g., `_*` for drafts)
-- **Search query**: Filter notes with Obsidian-style search syntax, such as `tag:#work` or `[status:Draft]`
-- **Frontmatter image properties**: Property names to check for images (default: `cover`, `image`, `banner`)
-- **Frontmatter properties before preview**: Property names to render before the note body (one per line)
-- **Frontmatter properties after preview**: Property names to render after the note body (one per line)
+Each feed has its own filters and preview settings:
 
-## Usage
+- Choose what appears using Obsidian search, or exclude folders, tags, and
+  filename patterns. Try a search in Obsidian's Search sidebar, then copy it
+  into the feed settings.
+- Adjust preview length and choose simplified previews or full note formatting.
+  Previews also support Dataview and Bases content.
+- Show note properties (frontmatter), such as tags or author, above or below
+  the preview. Use image properties such as `cover`, `image`, or `banner` to
+  show images on cards.
+- Include notes containing only attachments, or standalone images, PDFs, and
+  other files that aren't linked from a note.
 
-1. Click the gallery icon in the ribbon or use the "Open feed" command
-2. Click any card to open the note in a new pane
-3. Click the refresh icon when you want a new random batch
-4. Click the back arrow to return to the previous batch
-5. Adjust settings to tune which notes appear
+## Installation
+
+1. In Obsidian, open **Settings → Community plugins**.
+2. Browse for **Doomscroll**, then install and enable it.
 
 ## Development
 

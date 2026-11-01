@@ -194,7 +194,7 @@ export function extractSnippet(content: string): string {
     if (attachmentExt) {
       return `📎 ${attachmentExt.toUpperCase()} attached`;
     }
-    return '(no preview text)';
+    return '(No text to preview)';
   }
 
   // Cap total snippet size regardless of line count/length

@@ -138,7 +138,7 @@ export default class DoomscrollPlugin extends Plugin {
           // notes. Preserve that classification until the forced rebuild
           // below replaces the entry with the current metadata format.
           if (
-            preview.snippet === '(no preview text)' ||
+            preview.snippet === '(No text to preview)' ||
             /^📎 .+ attached$/.test(preview.snippet ?? '')
           ) {
             preview.mediaOnly = true;

@@ -1,7 +1,7 @@
 {
   "name": "doomscroll",
   "version": "1.0.0",
-  "description": "Doomscroll your own notes, not someone else's feed.",
+  "description": "Rediscover your notes, one scroll at a time.",
   "main": "main.js",
   "type": "module",
   "scripts": {

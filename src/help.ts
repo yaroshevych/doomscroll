@@ -5,11 +5,11 @@ const SHORTCUTS: Array<[string[], string]> = [
   [['k', '↑'], 'Previous card'],
   [['Home'], 'First card'],
   [['End'], 'Last card'],
-  [['Space'], 'Quick look at the focused note'],
-  [['Enter', 'o'], 'Open the focused card'],
-  [['Esc'], 'Clear the focus'],
+  [['Space'], 'Preview the selected card'],
+  [['Enter', 'o'], 'Open the selected card'],
+  [['Esc'], 'Clear selection'],
   [['r'], 'Reshuffle'],
-  [['p'], 'Previous card set'],
+  [['p'], 'Back to previous notes'],
   [['?'], 'Show this help'],
 ];
 

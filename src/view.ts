@@ -739,7 +739,7 @@ export class DoomscrollView extends ItemView {
       menu.addSeparator();
       const canUndoRefresh = this.batchHistoryCursor >= 0 && this.batchHistoryCursor < this.batchHistory.length - 1;
       menu.addItem((item) => item
-        .setTitle('Undo refresh')
+        .setTitle('Back to previous notes')
         .setDisabled(!canUndoRefresh)
         .onClick(() => { void this.showPreviousBatch(); })
       );
@@ -775,7 +775,7 @@ export class DoomscrollView extends ItemView {
       ? bodyContainer.createDiv('doomscroll-loading')
       : null;
     if (loadingEl) {
-      loadingEl.textContent = 'Indexing your vault…';
+      loadingEl.textContent = 'Preparing your notes…';
     }
 
     let indexRefreshed = false;
@@ -785,7 +785,7 @@ export class DoomscrollView extends ItemView {
       indexRefreshed = await this.plugin.indexer.refreshIfStale(
         (done, total) => {
           if (loadingEl) {
-            loadingEl.textContent = `Indexed ${done}/${total}`;
+            loadingEl.textContent = `Prepared ${done}/${total} notes`;
           }
         },
         needsInitialIndex,
@@ -799,7 +799,7 @@ export class DoomscrollView extends ItemView {
     } catch (error) {
       console.error('Error indexing vault:', error);
       if (loadingEl) {
-        loadingEl.textContent = 'Error indexing vault';
+        loadingEl.textContent = 'Could not prepare your notes';
       }
     } finally {
       this.setRefreshing(false);
@@ -1212,7 +1212,7 @@ export class DoomscrollView extends ItemView {
   private setRefreshing(refreshing: boolean): void {
     this.isRefreshing = refreshing;
     if (this.refreshStatusEl) {
-      this.refreshStatusEl.textContent = refreshing ? 'Indexing…' : '';
+      this.refreshStatusEl.textContent = refreshing ? 'Preparing notes…' : '';
     }
 
     const buttons = this.containerEl.querySelectorAll<HTMLButtonElement>(
@@ -1222,7 +1222,7 @@ export class DoomscrollView extends ItemView {
       button.disabled = refreshing;
       if (button.classList.contains('doomscroll-reshuffle-end-btn')) {
         const defaultLabel = button.dataset.defaultLabel ?? 'Reshuffle';
-        button.textContent = refreshing ? 'Indexing…' : defaultLabel;
+        button.textContent = refreshing ? 'Preparing notes…' : defaultLabel;
       }
     });
   }
@@ -1301,7 +1301,7 @@ export class DoomscrollView extends ItemView {
 
     const clone = renderedRoot.cloneNode(true) as HTMLElement;
     if (clone.childNodes.length === 0) {
-      snippetEl.textContent = '(no preview text)';
+      snippetEl.textContent = '(No text to preview)';
       return;
     }
     snippetEl.replaceChildren(...Array.from(clone.childNodes));
@@ -1472,7 +1472,7 @@ export class DoomscrollView extends ItemView {
 
     const file = this.plugin.app.vault.getAbstractFileByPath(preview.path);
     if (!(file instanceof TFile)) {
-      if (isCurrent()) snippetEl.textContent = '(no preview text)';
+      if (isCurrent()) snippetEl.textContent = '(No text to preview)';
       return;
     }
 
@@ -1538,7 +1538,7 @@ export class DoomscrollView extends ItemView {
     } catch (error) {
       console.error(`Error rendering preview for ${file.path}:`, error);
       if (isCurrent()) {
-        snippetEl.textContent = preview.snippet ?? '(no preview text)';
+        snippetEl.textContent = preview.snippet ?? '(No text to preview)';
       }
     }
   }
@@ -2229,7 +2229,7 @@ function isMediaOnlyPreview(preview: NotePreview): boolean {
 
   // Older cached previews predate the explicit mediaOnly flag.
   return (
-    (Boolean(preview.imagePath) && preview.snippet === '(no preview text)') ||
+    (Boolean(preview.imagePath) && preview.snippet === '(No text to preview)') ||
     /^📎 .+ attached$/.test(preview.snippet ?? '')
   );
 }

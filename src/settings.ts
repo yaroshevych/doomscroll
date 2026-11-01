@@ -78,7 +78,7 @@ class ResetFeedModal extends Modal {
   constructor(app: App, private onConfirm: () => void) { super(app); }
   onOpen(): void {
     this.titleEl.setText('Reset feed to defaults?');
-    this.contentEl.createEl('p', { text: 'This will replace this feed’s name, filters, and display options with their default values.' });
+    this.contentEl.createEl('p', { text: 'This will reset the feed’s name, filters, and display settings.' });
     new Setting(this.contentEl)
       .addButton((button) => button.setButtonText('Cancel').onClick(() => this.close()))
       .addButton((button) => button.setButtonText('Reset to defaults').setDestructive().onClick(() => {
@@ -93,7 +93,7 @@ class AddExcludedFolderModal extends Modal {
   onOpen(): void {
     this.titleEl.setText('Add excluded folder');
     let inputEl: HTMLInputElement;
-    new Setting(this.contentEl).setName('').setDesc('Select a folder from suggestions, or type or paste its path')
+    new Setting(this.contentEl).setName('').setDesc('Choose a suggested folder, or type or paste its path')
       .setClass('doomscroll-folder-picker-input doomscroll-folder-picker-field').addText((text) => {
       text.setPlaceholder('4. Archive');
       inputEl = text.inputEl;
@@ -102,7 +102,7 @@ class AddExcludedFolderModal extends Modal {
     new Setting(this.contentEl).addButton((button) => button.setButtonText('Cancel').onClick(() => this.close()))
       .addButton((button) => button.setButtonText('Add').setCta().onClick(async () => {
         const folder = normalizeFolderPath(inputEl.value);
-        if (!folder || folder === '.') { new Notice('Excluded folder path cannot be empty or the vault root'); return; }
+        if (!folder || folder === '.') { new Notice('Enter a folder path inside your vault'); return; }
         if (this.filters.excludeFolders.includes(folder)) { new Notice('That folder is already excluded'); return; }
         this.filters.excludeFolders.push(folder);
         await this.tab.saveExcludedFolders(this.filters);
@@ -148,12 +148,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     const definitions: SettingDefinitionItem[] = [
       {
         name: 'Infinite scrolling',
-        desc: 'Automatically load more notes as you reach the end of the feed',
+        desc: 'Load more notes when you reach the end of the feed',
         control: { type: 'toggle', key: 'infiniteScroll' },
       },
       {
-        name: 'Page size',
-        desc: 'Number of cards to show per reshuffle. Does not apply when infinite scrolling is enabled',
+        name: 'Notes per reshuffle',
+        desc: 'Choose how many cards to show when you reshuffle. This setting does not apply when infinite scrolling is on.',
         control: {
           type: 'dropdown',
           key: 'batchSize',
@@ -163,12 +163,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       },
       {
         name: 'Header scrolls with feed',
-        desc: 'The header will scroll away from view',
+        desc: 'Hide the header as you scroll',
         control: { type: 'toggle', key: 'headerScrollsWithFeed' },
       },
       {
         name: 'Reduce animation',
-        desc: 'Disable animations when navigating with keyboard',
+        desc: 'Turn off animations when using keyboard shortcuts',
         control: { type: 'toggle', key: 'reduceAnimations' },
       },
     ];
@@ -202,10 +202,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       addFeedPage(`Feed ${index + 1}`, feed);
     });
     feedItems.push({
-      name: 'Add Feed',
+      name: 'Add feed',
       render: (setting) => {
         setting.setClass('doomscroll-add-feed').addButton((button) =>
-          button.setButtonText('Add Feed').onClick(() => {
+          button.setButtonText('Add feed').onClick(() => {
             void this.addFeed();
           })
         );
@@ -255,7 +255,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             setting
               .setClass('doomscroll-search-query')
               .setName('Search query')
-              .setDesc('Use Obsidian search syntax, such as tag:#work or [status:Draft]. Refine your query in Search sidebar, then copy it here')
+              .setDesc('Choose notes using an Obsidian search, such as tag:#work or [status:Draft]. You can build your search in Obsidian’s Search sidebar and copy it here.')
               .addText((text) =>
                 text
                   .setPlaceholder('tag:#work [status:Draft]')
@@ -270,8 +270,8 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         ...this.createFeedOptions(filters),
         {
           type: 'page',
-          name: 'Frontmatter',
-          desc: 'Choose which note properties to render in previews',
+          name: 'Note properties',
+          desc: 'Choose which note properties to show in previews',
           items: [{
             type: 'group',
             items: this.createFrontmatterOptions(filters).map((option) => ({
@@ -294,7 +294,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             setting
               .setClass('doomscroll-large-text-editor')
               .setName('Exclude tags')
-              .setDesc('Tags to skip without # (one per line)')
+              .setDesc('Enter tags to leave out, one per line, without #.')
               .addTextArea((text) =>
                 text
                   .setPlaceholder('archive\nprivate\nignore')
@@ -312,7 +312,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             setting
               .setClass('doomscroll-large-text-editor')
               .setName('Exclude filename patterns')
-              .setDesc('Filename patterns to skip (one per line, e.g., _*)')
+              .setDesc('Enter one pattern per line. For example, _* excludes filenames starting with _.')
               .addTextArea((text) =>
                 text
                   .setPlaceholder('_*\nDraft*\nMOC*')
@@ -551,10 +551,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   private createFeedOptions(filters: FeedFilters): Array<{ name: string; render: (setting: Setting) => void }> {
     return [
       {
-        name: 'Include media-only notes',
+        name: 'Include notes with only attachments',
         render: (setting) => {
           setting
-      .setName('Include media-only notes')
+      .setName('Include notes with only attachments')
       .setDesc('Show Markdown notes containing only images or other attachments')
       .addToggle((toggle) =>
         toggle
@@ -567,11 +567,11 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         },
       },
       {
-        name: 'Show non-Markdown files',
+        name: 'Show unlinked attachments',
         render: (setting) => {
           setting
-      .setName('Show non-Markdown files')
-      .setDesc('Show standalone files such as images or PDFs, which are not referenced in any note')
+      .setName('Show unlinked attachments')
+      .setDesc('Show files such as images and PDFs that are not linked from a note')
       .addToggle((toggle) =>
         toggle
           .setValue(filters.showNonMarkdownFiles)
@@ -588,7 +588,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           setting
       .setName('Simplified view')
       .setDesc(
-        'Show concise previews without full Markdown formatting'
+        'Show simpler previews with less formatting'
       )
       .addToggle((toggle) =>
         toggle
@@ -651,12 +651,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   private createFrontmatterOptions(filters: FeedFilters): Array<{ name: string; render: (setting: Setting) => void }> {
     return [
       {
-        name: 'Frontmatter image properties',
+        name: 'Image properties',
         render: (setting) => {
           setting
-      .setName('Frontmatter image properties')
+      .setName('Image properties')
       .setDesc(
-        'Property names to check for images in frontmatter (one per line). These images will be rendered in previews'
+        'Enter the names of image properties, one per line. Images from these properties appear in previews.'
       )
       .addTextArea((text) =>
         text
@@ -673,12 +673,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         },
       },
       {
-        name: 'Frontmatter properties before preview',
+        name: 'Properties above preview',
         render: (setting) => {
           setting
-      .setName('Frontmatter properties before preview')
+      .setName('Properties above preview')
       .setDesc(
-        'Property names to render before the note body (one per line)'
+        'Enter property names to show before the note text, one per line.'
       )
       .addTextArea((text) =>
         text
@@ -694,12 +694,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         },
       },
       {
-        name: 'Frontmatter properties after preview',
+        name: 'Properties below preview',
         render: (setting) => {
           setting
-      .setName('Frontmatter properties after preview')
+      .setName('Properties below preview')
       .setDesc(
-        'Property names to render after the note body (one per line)'
+        'Enter property names to show after the note text, one per line.'
       )
       .addTextArea((text) =>
         text
@@ -720,7 +720,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
 }
 
-const FEEDS_DESCRIPTION = 'Doomscroll start with one default feed, which you can rename and configure. Add more feeds with custom content filters and preview settings. For example: custom feeds for journal and books notes.';
+const FEEDS_DESCRIPTION = 'Doomscroll starts with one feed. Rename it or change its settings, and add more feeds for different notes, such as your journal or books.';
 
 function configureGitHubLinks(setting: Setting, app: App): void {
   setting
