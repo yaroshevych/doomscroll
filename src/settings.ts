@@ -97,6 +97,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 export class DoomscrollSettingTab extends PluginSettingTab {
   plugin: DoomscrollPlugin;
   private legacyFeed: FeedFilters | null = null;
+  private legacyFrontmatter: string | null = null;
   private openPageNames = new Map<string, string>();
   private renameObservers = new Map<string, MutationObserver>();
 
@@ -209,6 +210,21 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           },
         },
         ...this.createFeedOptions(filters),
+        {
+          type: 'page',
+          name: 'Frontmatter',
+          desc: 'Choose which frontmatter properties provide images and appear before or after note previews.',
+          items: [{
+            type: 'group',
+            items: this.createFrontmatterOptions(filters).map((option) => ({
+              name: option.name,
+              render: (setting: Setting) => {
+                setting.setClass('doomscroll-frontmatter-editor');
+                option.render(setting);
+              },
+            })),
+          }],
+        },
         {
           name: 'Search query',
           render: (setting) => {
@@ -588,16 +604,32 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     const feed = this.legacyFeed;
     if (!feed) return;
     new Setting(containerEl)
-      .setName(feed.name.trim() || 'Feed')
+      .setName(this.legacyFrontmatter || feed.name.trim() || 'Feed')
       .setHeading()
       .addButton((button) => button.setButtonText('Back').onClick(() => {
-        this.legacyFeed = null;
+        if (this.legacyFrontmatter) this.legacyFrontmatter = null;
+        else this.legacyFeed = null;
         this.display();
       }));
+    if (this.legacyFrontmatter) {
+      for (const option of this.createFrontmatterOptions(feed)) {
+        option.render(new Setting(containerEl).setClass('doomscroll-frontmatter-editor'));
+      }
+      return;
+    }
     this.renderFeedFilters(containerEl, feed.name.trim() || 'Feed', feed);
     for (const option of this.createFeedOptions(feed)) {
-      option.render(new Setting(containerEl));
+      option.render(new Setting(containerEl).setClass('doomscroll-feed-option'));
     }
+    new Setting(containerEl)
+      .setName('Frontmatter')
+      .setDesc('Choose which frontmatter properties provide images and appear before or after note previews.')
+      .addButton((button) =>
+        button.setButtonText('Configure').onClick(() => {
+          this.legacyFrontmatter = 'Frontmatter';
+          this.display();
+        })
+      );
     if (feed !== this.plugin.data.settings) {
       new Setting(containerEl).setName('Delete feed').addButton((button) =>
         button.setButtonText('Delete feed').setWarning().onClick(() => { this.confirmDeleteFeed(feed, null); })
@@ -703,6 +735,11 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       );
         },
       },
+    ];
+  }
+
+  private createFrontmatterOptions(filters: FeedFilters): Array<{ name: string; render: (setting: Setting) => void }> {
+    return [
       {
         name: 'Frontmatter image properties',
         render: (setting) => {

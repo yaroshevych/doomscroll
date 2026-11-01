@@ -519,8 +519,32 @@
   margin-inline-start: auto;
 }
 
+.doomscroll-feed-filters textarea,
+.doomscroll-feed-option textarea,
+.doomscroll-frontmatter-editor textarea {
+  min-height: 7em;
+  width: 20em;
+  max-width: 100%;
+}
+
+.doomscroll-frontmatter-editor {
+  flex-direction: column;
+}
+
+.doomscroll-frontmatter-editor .setting-item-control,
+.doomscroll-frontmatter-editor textarea {
+  width: 100%;
+  max-width: none;
+}
+
+.doomscroll-frontmatter-editor textarea {
+  min-height: 14em;
+}
+
 .is-mobile .doomscroll-feed-filters .setting-item-control:has(textarea),
-.is-mobile .doomscroll-feed-filters .setting-item-control textarea {
+.is-mobile .doomscroll-feed-filters .setting-item-control textarea,
+.is-mobile .doomscroll-feed-option .setting-item-control:has(textarea),
+.is-mobile .doomscroll-feed-option .setting-item-control textarea {
   width: 100%;
   max-width: none;
 }
