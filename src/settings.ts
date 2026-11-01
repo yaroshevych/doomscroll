@@ -208,13 +208,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               );
           },
         },
-        {
-          name: 'Feed options',
-          render: (setting) => {
-            setting.setClass('doomscroll-feed-options');
-            this.renderFeedOptions(setting.settingEl.createDiv('doomscroll-feed-options-list'), filters);
-          },
-        },
+        ...this.createFeedOptions(filters),
         {
           name: 'Search query',
           render: (setting) => {
@@ -601,7 +595,9 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         this.display();
       }));
     this.renderFeedFilters(containerEl, feed.name.trim() || 'Feed', feed);
-    this.renderFeedOptions(containerEl, feed);
+    for (const option of this.createFeedOptions(feed)) {
+      option.render(new Setting(containerEl));
+    }
     if (feed !== this.plugin.data.settings) {
       new Setting(containerEl).setName('Delete feed').addButton((button) =>
         button.setButtonText('Delete feed').setWarning().onClick(() => { this.confirmDeleteFeed(feed, null); })
@@ -609,8 +605,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     }
   }
 
-  private renderFeedOptions(containerEl: HTMLElement, filters: FeedFilters): void {
-    new Setting(containerEl)
+  private createFeedOptions(filters: FeedFilters): Array<{ name: string; render: (setting: Setting) => void }> {
+    return [
+      {
+        name: 'Include media-only notes',
+        render: (setting) => {
+          setting
       .setName('Include media-only notes')
       .setDesc('Show Markdown notes containing only images or other attachments')
       .addToggle((toggle) =>
@@ -621,8 +621,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
-    new Setting(containerEl)
+        },
+      },
+      {
+        name: 'Show non-Markdown files',
+        render: (setting) => {
+          setting
       .setName('Show non-Markdown files')
       .setDesc('Show standalone vault files such as images, PDFs, and other attachments')
       .addToggle((toggle) =>
@@ -633,8 +637,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
-    new Setting(containerEl)
+        },
+      },
+      {
+        name: 'Simplified view',
+        render: (setting) => {
+          setting
       .setName('Simplified view')
       .setDesc(
         'Show concise previews with readable tables, links, and code; turn off for full Markdown formatting.'
@@ -647,8 +655,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
-    new Setting(containerEl)
+        },
+      },
+      {
+        name: 'Preview size',
+        render: (setting) => {
+          setting
       .setName('Preview size')
       .setDesc('How many lines of note text to show on each card')
       .addDropdown((dropdown) =>
@@ -665,8 +677,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
-    new Setting(containerEl)
+        },
+      },
+      {
+        name: 'Open notes in',
+        render: (setting) => {
+          setting
       .setName('Open notes in')
       .setDesc('Choose where a card opens')
       .addDropdown((dropdown) =>
@@ -685,8 +701,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
-    new Setting(containerEl)
+        },
+      },
+      {
+        name: 'Frontmatter image properties',
+        render: (setting) => {
+          setting
       .setName('Frontmatter image properties')
       .setDesc(
         'Property names to check for images in frontmatter (one per line)'
@@ -703,8 +723,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
-    new Setting(containerEl)
+        },
+      },
+      {
+        name: 'Frontmatter properties before preview',
+        render: (setting) => {
+          setting
       .setName('Frontmatter properties before preview')
       .setDesc(
         'Property names to render before the note body (one per line)'
@@ -720,8 +744,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
-    new Setting(containerEl)
+        },
+      },
+      {
+        name: 'Frontmatter properties after preview',
+        render: (setting) => {
+          setting
       .setName('Frontmatter properties after preview')
       .setDesc(
         'Property names to render after the note body (one per line)'
@@ -737,7 +765,9 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             await this.saveFeedSettings(filters);
           })
       );
-
+        },
+      },
+    ];
   }
 
   private renderFeedFilters(

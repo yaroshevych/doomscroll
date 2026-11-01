@@ -519,21 +519,10 @@
   margin-inline-start: auto;
 }
 
-.doomscroll-feed-options {
-  display: block;
-}
-
-.doomscroll-feed-options > .setting-item-info,
-.doomscroll-feed-options > .setting-item-control {
-  display: none;
-}
-
-.setting-group .doomscroll-feed-options .doomscroll-feed-options-list > .setting-item:not(.setting-item-heading) {
-  padding-inline: 0;
-}
-
-.setting-group .doomscroll-feed-options .doomscroll-feed-options-list > .setting-item:not(.setting-item-heading)::before {
-  inset-inline: 0;
+.is-mobile .doomscroll-feed-filters .setting-item-control:has(textarea),
+.is-mobile .doomscroll-feed-filters .setting-item-control textarea {
+  width: 100%;
+  max-width: none;
 }
 
 .doomscroll-excluded-folders-list {
