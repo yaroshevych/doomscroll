@@ -180,6 +180,14 @@ export class DoomscrollView extends ItemView {
         });
       }
     };
+    if (__DEBUG__) {
+      bind([','], () => {
+        this.plugin.debugSettingsFeedId = this.feedId;
+        const { setting } = this.plugin.app as unknown as AppWithSettings;
+        setting.open();
+        setting.openTabById('doomscroll');
+      });
+    }
     bind(['j', 'ArrowDown'], () => this.moveCardFocus(1));
     bind(['k', 'ArrowUp'], () => this.moveCardFocus(-1));
     bind(['Enter', 'o'], () => this.openFocusedCard());

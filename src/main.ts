@@ -12,6 +12,8 @@ export default class DoomscrollPlugin extends Plugin {
   indexer!: Indexer;
   private settingsRefreshTimer: number | null = null;
   private feedCommandIds: string[] = [];
+  private feedSettingsTab!: DoomscrollSettingTab;
+  debugSettingsFeedId = 'default';
 
   async onload(): Promise<void> {
     type LegacySettings = PluginData['settings'] & {
@@ -224,7 +226,19 @@ export default class DoomscrollPlugin extends Plugin {
     this.refreshFeedCommands();
 
     // Settings tab
-    this.addSettingTab(new DoomscrollSettingTab(this.app, this));
+    this.feedSettingsTab = new DoomscrollSettingTab(this.app, this);
+    this.addSettingTab(this.feedSettingsTab);
+    if (__DEBUG__) {
+      this.registerDomEvent(document, 'keydown', (event: KeyboardEvent) => {
+        if (event.key !== ',' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat) return;
+        const target = event.target;
+        if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return;
+        if (this.feedSettingsTab.openDebugFeedPage(this.debugSettingsFeedId)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+    }
   }
 
   async activateView(feedId = 'default'): Promise<void> {
