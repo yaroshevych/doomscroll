@@ -108,10 +108,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   getSettingDefinitions(): SettingDefinitionItem[] {
     const definitions: SettingDefinitionItem[] = [
       {
-        name: 'Doomscroll settings',
-        render: (setting) => configureHeader(setting),
-      },
-      {
         name: 'Infinite scrolling',
         desc: 'Automatically load more notes as you reach the end of the feed',
         control: { type: 'toggle', key: 'infiniteScroll' },
@@ -176,6 +172,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       },
     });
     definitions.push({ type: 'group', heading: 'Feeds', cls: 'doomscroll-feeds-group', items: feedItems });
+    definitions.push({
+      type: 'group',
+      items: [
+        { name: 'Help & support', render: (setting) => configureGitHubLinks(setting) },
+      ],
+    });
 
     return definitions;
   }
@@ -520,8 +522,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       return;
     }
 
-    configureHeader(new Setting(containerEl));
-
     let batchSizeSetting: Setting | null = null;
     new Setting(containerEl)
       .setName('Infinite scrolling')
@@ -588,6 +588,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     new Setting(feedsGroup).setClass('doomscroll-add-feed').addButton((button) =>
       button.setButtonText('Add Feed').onClick(() => { void this.addFeed(); })
     );
+    configureGitHubLinks(new Setting(containerEl));
   }
 
   private displayLegacyFeedsPage(): void {
@@ -862,11 +863,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
 const FEEDS_DESCRIPTION = 'You start with one default feed, which you can rename and configure. You can also add more feeds.';
 
-function configureHeader(setting: Setting): void {
+function configureGitHubLinks(setting: Setting): void {
   setting
-    .setClass('doomscroll-settings-header')
-    .setName('Doomscroll settings')
-    .setHeading()
+    .setClass('doomscroll-github-links')
+    .setName('Help & support')
     .addButton((button) =>
       button.setButtonText('GitHub').onClick(() => {
         window.open(GITHUB_URL, '_blank');

@@ -504,16 +504,15 @@
   color: var(--text-muted);
 }
 
-.doomscroll-settings-header {
-  padding-top: 1rem;
-}
-
-.doomscroll-settings-header .setting-item-control {
-  margin-top: 1rem;
-}
-
 .doomscroll-add-feed .setting-item-info {
   display: none;
+}
+
+.doomscroll-github-links .setting-item-control {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
 }
 
 .doomscroll-add-feed .setting-item-control {
