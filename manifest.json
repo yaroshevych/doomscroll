@@ -1,7 +1,7 @@
 {
   "id": "doomscroll",
   "name": "Doomscroll",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.13.0",
   "description": "Rediscover your notes, one scroll at a time.",
   "author": "yaroshevych",

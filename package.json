@@ -1,6 +1,6 @@
 {
   "name": "doomscroll",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Rediscover your notes, one scroll at a time.",
   "main": "main.js",
   "type": "module",
