@@ -519,12 +519,6 @@
   margin-inline-start: auto;
 }
 
-.doomscroll-feeds-description .setting-item-name {
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
-  font-weight: var(--font-normal);
-}
-
 .doomscroll-feed-options {
   display: block;
 }

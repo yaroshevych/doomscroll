@@ -135,9 +135,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     ];
 
     const feedItems: SettingGroupItem[] = [
-      { name: 'About feeds', render: (setting) => {
-        setting.setName(FEEDS_DESCRIPTION).setClass('doomscroll-feeds-description');
-      } },
+      { name: 'Feeds', desc: FEEDS_DESCRIPTION },
     ];
     const usedNames = new Set<string>();
     const addFeedPage = (fallback: string, feed: FeedFilters) => {
@@ -171,7 +169,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         );
       },
     });
-    definitions.push({ type: 'group', heading: 'Feeds', cls: 'doomscroll-feeds-group', items: feedItems });
+    definitions.push({ type: 'group', items: feedItems });
     definitions.push({
       type: 'group',
       items: [
@@ -575,7 +573,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       );
 
     const feedsGroup = containerEl.createDiv('doomscroll-feeds-group');
-    new Setting(feedsGroup).setName('Feeds').setDesc(FEEDS_DESCRIPTION).setHeading();
+    new Setting(feedsGroup).setName('Feeds').setDesc(FEEDS_DESCRIPTION);
     const addFeedLink = (feed: FeedFilters, fallback: string) => {
       new Setting(feedsGroup).setName(feed.name.trim() || fallback)
         .addButton((button) => button.setButtonText('Configure').onClick(() => {
