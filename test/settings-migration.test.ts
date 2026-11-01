@@ -50,6 +50,7 @@ async function start(loaded: unknown) {
   const listeners: Record<string, (...args: unknown[]) => void> = {};
   const plugin = new DoomscrollPlugin({
     workspace: { getLeavesOfType: () => [] },
+    vault: { on: (event: string, callback: (...args: unknown[]) => void) => { listeners[event] = callback; } },
     metadataCache: { on: (event: string, callback: (...args: unknown[]) => void) => { listeners[event] = callback; } },
   });
   plugin.listeners = listeners;

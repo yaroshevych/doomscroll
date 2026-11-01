@@ -206,6 +206,23 @@ export default class DoomscrollPlugin extends Plugin {
     this.registerEvent(this.app.metadataCache.on('changed', () => {
       this.indexer.markDirty();
     }));
+    this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+      this.indexer.markDirty();
+      let historyChanged = false;
+      for (const entry of this.data.history) {
+        if (entry.path === oldPath || entry.path.startsWith(`${oldPath}/`)) {
+          entry.path = file.path + entry.path.slice(oldPath.length);
+          historyChanged = true;
+        }
+      }
+      if (historyChanged) void this.saveSettings();
+      const views = this.app.workspace.getLeavesOfType(VIEW_TYPE_DOOMSCROLL);
+      for (const leaf of views) {
+        if (leaf.view instanceof DoomscrollView) {
+          void leaf.view.refreshForCurrentSettings();
+        }
+      }
+    }));
 
     // Register view
     this.registerView(

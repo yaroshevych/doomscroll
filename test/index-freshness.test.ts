@@ -28,7 +28,7 @@ test('resetting the default feed rebuilds cached images using default properties
   const file = { path: 'Note.md', extension: 'md', stat: { mtime: 1 } };
   const app = {
     workspace: { getLeavesOfType: () => [] },
-    vault: { getFiles: () => [file], cachedRead: async () => 'note' },
+    vault: { on: () => {}, getFiles: () => [file], cachedRead: async () => 'note' },
     metadataCache: {
       on: () => {},
       getFileCache: () => ({ frontmatter: { custom: 'old.png', cover: 'new.png' } }),
@@ -55,7 +55,10 @@ test('a metadata change causes the next refresh to update feed membership', asyn
   const listeners: Record<string, () => void> = {};
   const app = {
     workspace: { getLeavesOfType: () => [] },
-    vault: { getFiles: () => [file], cachedRead: async () => 'note' },
+    vault: {
+      on: (event: string, callback: () => void) => { listeners[event] = callback; },
+      getFiles: () => [file], cachedRead: async () => 'note',
+    },
     metadataCache: {
       on: (event: string, callback: () => void) => { listeners[event] = callback; },
       getFileCache: () => cache,
@@ -73,4 +76,33 @@ test('a metadata change causes the next refresh to update feed membership', asyn
   listeners.changed!();
   await plugin.indexer.refreshIfStale();
   assert.equal(plugin.data.previews['Note.md'], undefined);
+});
+
+test('renaming a file invalidates its old path and keeps its reading history', async () => {
+  (globalThis as any).window = { setTimeout };
+  const file = { path: 'Notes/Old.md', extension: 'md', stat: { mtime: 1 } };
+  const listeners: Record<string, (...args: any[]) => void> = {};
+  const app = {
+    workspace: { getLeavesOfType: () => [] },
+    vault: {
+      on: (event: string, callback: (...args: any[]) => void) => { listeners[event] = callback; },
+      getFiles: () => [file], cachedRead: async () => 'note',
+    },
+    metadataCache: { on: () => {}, getFileCache: () => ({}) },
+  };
+  const plugin = new Plugin(app);
+  await plugin.onload();
+  plugin.data.settings.showNonMarkdownFiles = false;
+  plugin.data.history = [{ path: file.path, viewedAt: 123 }];
+  await plugin.indexer.refreshIfStale();
+  file.path = 'Notes/New.md';
+  listeners.rename!(file, 'Notes/Old.md');
+  await plugin.indexer.refreshIfStale();
+  assert.equal(plugin.data.previews['Notes/Old.md'], undefined);
+  assert.ok(plugin.data.previews['Notes/New.md']);
+  assert.deepEqual(plugin.data.history, [{ path: 'Notes/New.md', viewedAt: 123 }]);
+
+  file.path = 'Moved';
+  listeners.rename!(file, 'Notes');
+  assert.equal(plugin.data.history[0].path, 'Moved/New.md');
 });
