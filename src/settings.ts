@@ -209,7 +209,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               );
           },
         },
-        ...this.createFeedOptions(filters),
         {
           name: 'Search query',
           render: (setting) => {
@@ -228,6 +227,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               );
           },
         },
+        ...this.createFeedOptions(filters),
         {
           type: 'page',
           name: 'Frontmatter',
@@ -243,6 +243,11 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             })),
           }],
         },
+        {
+          type: 'page',
+          name: 'Exclusions',
+          desc: 'Exclude notes by tag, filename pattern, or folder.',
+          items: [{ type: 'group', cls: 'doomscroll-feed-filters', items: [
         {
           name: 'Exclude tags',
           render: (setting) => {
@@ -316,6 +321,8 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               })
             );
           },
+        },
+          ] }],
         },
       ],
     };
@@ -612,6 +619,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         else this.legacyFeed = null;
         this.display();
       }));
+    if (this.legacyFrontmatter === 'Exclusions') {
+      this.renderLegacyExclusions(containerEl, feed);
+      return;
+    }
     if (this.legacyFrontmatter) {
       for (const option of this.createFrontmatterOptions(feed)) {
         option.render(new Setting(containerEl).setClass('doomscroll-frontmatter-editor'));
@@ -631,6 +642,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           this.display();
         })
       );
+    new Setting(containerEl).setName('Exclusions')
+      .setDesc('Exclude notes by tag, filename pattern, or folder.')
+      .addButton((button) => button.setButtonText('Configure').onClick(() => {
+        this.legacyFrontmatter = 'Exclusions';
+        this.display();
+      }));
     if (feed !== this.plugin.data.settings) {
       new Setting(containerEl).setName('Delete feed').addButton((button) =>
         button.setButtonText('Delete feed').setWarning().onClick(() => { this.confirmDeleteFeed(feed, null); })
@@ -845,6 +862,10 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           })
       );
 
+  }
+
+  private renderLegacyExclusions(containerEl: HTMLElement, filters: FeedFilters): void {
+    const feedGroup = containerEl.createDiv('doomscroll-feed-filters');
     new Setting(feedGroup)
       .setName('Exclude tags')
       .setDesc('Tags to skip without # (one per line)')
