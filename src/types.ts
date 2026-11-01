@@ -2,7 +2,16 @@ export type OpenNoteBehavior = 'tab' | 'reuse' | 'window';
 export type PreviewSize = 'small' | 'medium' | 'large';
 
 export interface FeedFilters {
+  id: string;
   name: string;
+  includeMediaOnlyNotes: boolean;
+  showNonMarkdownFiles: boolean;
+  simplifiedView: boolean;
+  previewSize: PreviewSize;
+  openNoteBehavior: OpenNoteBehavior;
+  frontmatterImageProps: string[];
+  frontmatterBeforeProps: string[];
+  frontmatterAfterProps: string[];
   searchQuery: string;
   excludeTags: string[];
   excludeGlobs: string[];
@@ -10,6 +19,8 @@ export interface FeedFilters {
 }
 
 export interface PluginSettings {
+  id: string;
+  legacyFeedIds?: Record<string, string>;
   name: string;
   batchSize: number;
   infiniteScroll: boolean;

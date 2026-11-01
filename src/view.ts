@@ -387,7 +387,7 @@ export class DoomscrollView extends ItemView {
     const restored = parseViewState(state);
     if (!restored) return;
 
-    this.feedId = restored.feedId;
+    this.feedId = this.plugin.resolveFeedId(restored.feedId);
     this.updateFeedTitle();
     const previousBatch = this.currentBatch;
     const previousPaths = previousBatch.map((preview) => preview.path);
@@ -1220,6 +1220,9 @@ export class DoomscrollView extends ItemView {
     return JSON.stringify({
       ...batchSettings,
       feedFilters: {
+        includeMediaOnlyNotes: feedFilters.includeMediaOnlyNotes,
+        showNonMarkdownFiles: feedFilters.showNonMarkdownFiles,
+        frontmatterImageProps: feedFilters.frontmatterImageProps,
         searchQuery: feedFilters.searchQuery,
         excludeFolders: feedFilters.excludeFolders,
         excludeTags: feedFilters.excludeTags,
@@ -1234,29 +1237,29 @@ export class DoomscrollView extends ItemView {
 
   private shouldIncludePreview(preview: NotePreview): boolean {
     if (preview.attachment) {
-      return this.plugin.data.settings.showNonMarkdownFiles;
+      return this.getActiveFeedFilters().showNonMarkdownFiles;
     }
     return (
-      this.plugin.data.settings.includeMediaOnlyNotes ||
+      this.getActiveFeedFilters().includeMediaOnlyNotes ||
       !isMediaOnlyPreview(preview)
     );
   }
 
   private getFrontmatterPropertiesKey(): string {
     return JSON.stringify({
-      before: this.plugin.data.settings.frontmatterBeforeProps ?? [],
-      after: this.plugin.data.settings.frontmatterAfterProps ?? [],
+      before: this.getActiveFeedFilters().frontmatterBeforeProps ?? [],
+      after: this.getActiveFeedFilters().frontmatterAfterProps ?? [],
     });
   }
 
   private isSimplifiedView(): boolean {
     // Treat missing values from pre-setting data.json files as the default.
-    return this.plugin.data.settings.simplifiedView !== false;
+    return this.getActiveFeedFilters().simplifiedView !== false;
   }
 
   private getPreviewSize(): PreviewSize {
-    return isPreviewSize(this.plugin.data.settings.previewSize)
-      ? this.plugin.data.settings.previewSize
+    return isPreviewSize(this.getActiveFeedFilters().previewSize)
+      ? this.getActiveFeedFilters().previewSize
       : 'medium';
   }
 
@@ -1737,7 +1740,7 @@ export class DoomscrollView extends ItemView {
       // A very quick tap can happen before IntersectionObserver fires.
       this.recordViewedPath(preview.path);
 
-      const behavior = this.plugin.data.settings.openNoteBehavior;
+      const behavior = this.getActiveFeedFilters().openNoteBehavior;
       const leaf =
         behavior === 'reuse'
           ? this.leaf
@@ -1954,8 +1957,8 @@ export class DoomscrollView extends ItemView {
     frontmatterEl.classList.add(`doomscroll-card-frontmatter-${position}`);
     const properties =
       position === 'before'
-        ? this.plugin.data.settings.frontmatterBeforeProps ?? []
-        : this.plugin.data.settings.frontmatterAfterProps ?? [];
+        ? this.getActiveFeedFilters().frontmatterBeforeProps ?? []
+        : this.getActiveFeedFilters().frontmatterAfterProps ?? [];
     this.renderFrontmatterProperties(preview, frontmatterEl, properties);
     if (frontmatterEl.childElementCount === 0) {
       frontmatterEl.remove();

@@ -81,8 +81,8 @@ export class Indexer {
       excludeTags: filters.excludeTags,
       excludeGlobs: filters.excludeGlobs,
       searchQuery: filters.searchQuery,
-      frontmatterImageProps: this.data.settings.frontmatterImageProps,
-      showNonMarkdownFiles: this.data.settings.showNonMarkdownFiles,
+      frontmatterImageProps: filters.frontmatterImageProps,
+      showNonMarkdownFiles: filters.showNonMarkdownFiles,
     });
   }
 
@@ -90,7 +90,7 @@ export class Indexer {
     const candidates: TFile[] = [];
     const allFiles = this.app.vault.getFiles();
     const referencedAttachmentPaths = new Set<string>();
-    if (this.data.settings.showNonMarkdownFiles) {
+    if (filters.showNonMarkdownFiles) {
       for (const sourceFile of allFiles) {
         if (sourceFile.extension.toLowerCase() !== 'md') continue;
         const fileCache = this.app.metadataCache.getFileCache(sourceFile);
@@ -109,7 +109,7 @@ export class Indexer {
 
         for (const imagePath of extractFrontmatterImages(
           frontmatter,
-          this.data.settings.frontmatterImageProps
+          filters.frontmatterImageProps
         )) {
           if (/^https?:\/\//i.test(imagePath)) continue;
           let lookupPath = imagePath;
@@ -184,7 +184,7 @@ export class Indexer {
       ) {
         continue;
       }
-      if (!isMarkdown && !this.data.settings.showNonMarkdownFiles) {
+      if (!isMarkdown && !filters.showNonMarkdownFiles) {
         continue;
       }
       if (!isMarkdown || excludeTags.size === 0) {
@@ -331,7 +331,7 @@ export class Indexer {
           const imagePath = extractImage(
             content,
             frontmatter,
-            this.data.settings.frontmatterImageProps
+            filters.frontmatterImageProps
           );
           const mediaOnly =
             (Boolean(imagePath) || hasMediaEmbed(content)) &&

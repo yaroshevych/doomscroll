@@ -10,6 +10,7 @@ import {
   type SettingGroupItem,
 } from 'obsidian';
 import DoomscrollPlugin from './main';
+import { uuidv7 } from './uuid';
 import { FeedFilters, isPreviewSize, PluginSettings } from './types';
 
 const GITHUB_URL = 'https://github.com/yaroshevych/doomscroll';
@@ -52,6 +53,7 @@ class FolderSuggest extends AbstractInputSuggest<string> {
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
+  id: '',
   name: 'Default feed',
   batchSize: 20,
   infiniteScroll: false,
@@ -75,6 +77,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 export class DoomscrollSettingTab extends PluginSettingTab {
   plugin: DoomscrollPlugin;
   private legacyFeed: FeedFilters | null = null;
+  private openPageNames = new Map<string, string>();
+  private renameObservers = new Map<string, MutationObserver>();
 
   constructor(app: App, plugin: DoomscrollPlugin) {
     super(app, plugin);
@@ -108,57 +112,9 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         control: { type: 'toggle', key: 'headerScrollsWithFeed' },
       },
       {
-        name: 'Include media-only notes',
-        desc: 'Show Markdown notes containing only images or other attachments',
-        control: { type: 'toggle', key: 'includeMediaOnlyNotes' },
-      },
-      {
-        name: 'Show non-Markdown files',
-        desc: 'Show standalone vault files such as images, PDFs, and other attachments',
-        control: { type: 'toggle', key: 'showNonMarkdownFiles' },
-      },
-      {
-        name: 'Simplified view',
-        desc: 'Show concise previews with readable tables, links, and code; turn off for full Markdown formatting.',
-        control: { type: 'toggle', key: 'simplifiedView' },
-      },
-      {
         name: 'Reduce animation',
         desc: 'Disable card and scrolling animations during keyboard navigation',
         control: { type: 'toggle', key: 'reduceAnimations' },
-      },
-      {
-        name: 'Preview size',
-        desc: 'How many lines of note text to show on each card',
-        control: {
-          type: 'dropdown',
-          key: 'previewSize',
-          options: { small: 'Small', medium: 'Medium', large: 'Large' },
-        },
-      },
-      {
-        name: 'Open notes in',
-        desc: 'Choose where a card opens',
-        control: {
-          type: 'dropdown',
-          key: 'openNoteBehavior',
-          options: { tab: 'New tab', reuse: 'Reuse current tab', window: 'New window' },
-        },
-      },
-      {
-        name: 'Frontmatter image properties',
-        desc: 'Property names to check for images in frontmatter (one per line)',
-        control: { type: 'textarea', key: 'frontmatterImageProps' },
-      },
-      {
-        name: 'Frontmatter properties before preview',
-        desc: 'Property names to render before the note body (one per line)',
-        control: { type: 'textarea', key: 'frontmatterBeforeProps' },
-      },
-      {
-        name: 'Frontmatter properties after preview',
-        desc: 'Property names to render after the note body (one per line)',
-        control: { type: 'textarea', key: 'frontmatterAfterProps' },
       },
     ];
 
@@ -169,12 +125,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     ];
     const usedNames = new Set<string>();
     const addFeedPage = (fallback: string, feed: FeedFilters) => {
-      const base = feed.name.trim() || fallback;
+      const base = this.openPageNames.get(feed.id) ?? (feed.name.trim() || fallback);
       let name = base;
       let suffix = 2;
       while (usedNames.has(name)) name = `${base} (${suffix++})`;
       usedNames.add(name);
-      const group = this.createFeedDefinition(fallback, feed);
+      const group = this.createFeedDefinition(fallback, feed, name);
       feedItems.push({ type: 'page', name, items: [group, ...(feed === this.plugin.data.settings ? [] : [{
         name: 'Delete feed',
         render: (setting: Setting) => { setting.setName('Delete feed').addButton((button) =>
@@ -203,16 +159,17 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
   private createFeedDefinition(
     heading: string,
-    filters: FeedFilters
+    filters: FeedFilters,
+    pageName: string
   ): SettingDefinitionItem {
     return {
       type: 'group',
-      heading: filters.name.trim() || heading,
       cls: 'doomscroll-feed-filters',
       items: [
         {
           name: 'Name',
           render: (setting) => {
+            this.openPageNames.set(filters.id, pageName);
             setting
               .setName('Name')
               .addText((text) =>
@@ -220,15 +177,19 @@ export class DoomscrollSettingTab extends PluginSettingTab {
                   .setValue(filters.name)
                   .onChange(async (value) => {
                     filters.name = value;
+                    this.refreshFeedNameAfterLeavingPage(setting.settingEl, filters.id);
                     await this.plugin.saveSettings();
+                    this.plugin.refreshFeedCommands();
                   })
               );
-            setting.settingEl
-              .querySelector('input')
-              ?.addEventListener('blur', () => {
-                this.plugin.refreshFeedCommands();
-                this.refreshDeclarativeSettings();
-              });
+          },
+        },
+        {
+          name: 'Feed options',
+          render: (setting) => {
+            const container = setting.settingEl.parentElement!;
+            setting.settingEl.remove();
+            this.renderFeedOptions(container, filters);
           },
         },
         {
@@ -327,17 +288,37 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   }
 
   private async saveFeedSettings(filters: FeedFilters): Promise<void> {
-    if (filters === this.plugin.data.settings) {
-      await this.plugin.saveSettingsAndRefreshViews();
-    } else {
-      await this.plugin.saveSettings();
-    }
+    await this.plugin.saveSettingsAndRefreshViews();
+  }
+
+  private refreshFeedNameAfterLeavingPage(settingEl: HTMLElement, feedId: string): void {
+    if (this.renameObservers.has(feedId)) return;
+    const page = settingEl.closest('.setting-page');
+    if (!page) return;
+    const observer = new MutationObserver(() => {
+      if (page.isConnected) return;
+      observer.disconnect();
+      this.renameObservers.delete(feedId);
+      this.openPageNames.delete(feedId);
+      this.update();
+    });
+    this.renameObservers.set(feedId, observer);
+    observer.observe(page.ownerDocument.body, { childList: true, subtree: true });
   }
 
   private async addFeed(): Promise<void> {
     const defaults = this.plugin.data.settings;
     this.plugin.data.settings.additionalFeeds.push({
+      id: uuidv7(),
       name: `Feed ${this.plugin.data.settings.additionalFeeds.length + 1}`,
+      includeMediaOnlyNotes: defaults.includeMediaOnlyNotes,
+      showNonMarkdownFiles: defaults.showNonMarkdownFiles,
+      simplifiedView: defaults.simplifiedView,
+      previewSize: defaults.previewSize,
+      openNoteBehavior: defaults.openNoteBehavior,
+      frontmatterImageProps: [...defaults.frontmatterImageProps],
+      frontmatterBeforeProps: [...defaults.frontmatterBeforeProps],
+      frontmatterAfterProps: [...defaults.frontmatterAfterProps],
       searchQuery: defaults.searchQuery,
       excludeTags: [...defaults.excludeTags],
       excludeGlobs: [...defaults.excludeGlobs],
@@ -352,6 +333,9 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     const index = this.plugin.data.settings.additionalFeeds.indexOf(feed);
     if (index < 0) return;
     this.legacyFeed = null;
+    if (requireApiVersion('1.13.0')) {
+      document.querySelector<HTMLElement>('.setting-page-back-button')?.click();
+    }
     await this.plugin.removeAdditionalFeed(index);
     this.refreshDeclarativeSettings();
   }
@@ -550,44 +534,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName('Include media-only notes')
-      .setDesc('Show Markdown notes containing only images or other attachments')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.data.settings.includeMediaOnlyNotes)
-          .onChange(async (value) => {
-            this.plugin.data.settings.includeMediaOnlyNotes = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Show non-Markdown files')
-      .setDesc('Show standalone vault files such as images, PDFs, and other attachments')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.data.settings.showNonMarkdownFiles)
-          .onChange(async (value) => {
-            this.plugin.data.settings.showNonMarkdownFiles = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Simplified view')
-      .setDesc(
-        'Show concise previews with readable tables, links, and code; turn off for full Markdown formatting.'
-      )
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.data.settings.simplifiedView !== false)
-          .onChange(async (value) => {
-            this.plugin.data.settings.simplifiedView = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
       .setName('Reduce animation')
       .setDesc('Disable card and scrolling animations during keyboard navigation')
       .addToggle((toggle) =>
@@ -595,92 +541,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           .setValue(this.plugin.data.settings.reduceAnimations)
           .onChange(async (value) => {
             this.plugin.data.settings.reduceAnimations = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Preview size')
-      .setDesc('How many lines of note text to show on each card')
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOptions({
-            small: 'Small',
-            medium: 'Medium',
-            large: 'Large',
-          })
-          .setValue(this.plugin.data.settings.previewSize)
-          .onChange(async (value) => {
-            if (!isPreviewSize(value)) return;
-            this.plugin.data.settings.previewSize = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Open notes in')
-      .setDesc('Choose where a card opens')
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOptions({
-            tab: 'New tab',
-            reuse: 'Reuse current tab',
-            window: 'New window',
-          })
-          .setValue(this.plugin.data.settings.openNoteBehavior)
-          .onChange(async (value) => {
-            if (value !== 'tab' && value !== 'reuse' && value !== 'window') {
-              return;
-            }
-            this.plugin.data.settings.openNoteBehavior = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Frontmatter image properties')
-      .setDesc(
-        'Property names to check for images in frontmatter (one per line)'
-      )
-      .addTextArea((text) =>
-        text
-          .setValue(this.plugin.data.settings.frontmatterImageProps.join('\n'))
-          .onChange(async (value) => {
-            this.plugin.data.settings.frontmatterImageProps = parseLines(value);
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Frontmatter properties before preview')
-      .setDesc(
-        'Property names to render before the note body (one per line)'
-      )
-      .addTextArea((text) =>
-        text
-          .setPlaceholder('title\nsource\nauthor')
-          .setValue(
-            this.plugin.data.settings.frontmatterBeforeProps.join('\n')
-          )
-          .onChange(async (value) => {
-            this.plugin.data.settings.frontmatterBeforeProps = parseLines(value);
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Frontmatter properties after preview')
-      .setDesc(
-        'Property names to render after the note body (one per line)'
-      )
-      .addTextArea((text) =>
-        text
-          .setPlaceholder('source\nauthor\npublished')
-          .setValue(
-            this.plugin.data.settings.frontmatterAfterProps.join('\n')
-          )
-          .onChange(async (value) => {
-            this.plugin.data.settings.frontmatterAfterProps = parseLines(value);
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );
@@ -713,11 +573,143 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         this.display();
       }));
     this.renderFeedFilters(containerEl, feed.name.trim() || 'Feed', feed);
+    this.renderFeedOptions(containerEl, feed);
     if (feed !== this.plugin.data.settings) {
       new Setting(containerEl).setName('Delete feed').addButton((button) =>
         button.setButtonText('Delete feed').setWarning().onClick(() => { void this.deleteFeed(feed); })
       );
     }
+  }
+
+  private renderFeedOptions(containerEl: HTMLElement, filters: FeedFilters): void {
+    new Setting(containerEl)
+      .setName('Include media-only notes')
+      .setDesc('Show Markdown notes containing only images or other attachments')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(filters.includeMediaOnlyNotes)
+          .onChange(async (value) => {
+            filters.includeMediaOnlyNotes = value;
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Show non-Markdown files')
+      .setDesc('Show standalone vault files such as images, PDFs, and other attachments')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(filters.showNonMarkdownFiles)
+          .onChange(async (value) => {
+            filters.showNonMarkdownFiles = value;
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Simplified view')
+      .setDesc(
+        'Show concise previews with readable tables, links, and code; turn off for full Markdown formatting.'
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(filters.simplifiedView !== false)
+          .onChange(async (value) => {
+            filters.simplifiedView = value;
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Preview size')
+      .setDesc('How many lines of note text to show on each card')
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            small: 'Small',
+            medium: 'Medium',
+            large: 'Large',
+          })
+          .setValue(filters.previewSize)
+          .onChange(async (value) => {
+            if (!isPreviewSize(value)) return;
+            filters.previewSize = value;
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Open notes in')
+      .setDesc('Choose where a card opens')
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            tab: 'New tab',
+            reuse: 'Reuse current tab',
+            window: 'New window',
+          })
+          .setValue(filters.openNoteBehavior)
+          .onChange(async (value) => {
+            if (value !== 'tab' && value !== 'reuse' && value !== 'window') {
+              return;
+            }
+            filters.openNoteBehavior = value;
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Frontmatter image properties')
+      .setDesc(
+        'Property names to check for images in frontmatter (one per line)'
+      )
+      .addTextArea((text) =>
+        text
+          .setValue(filters.frontmatterImageProps.join('\n'))
+          .onChange(async (value) => {
+            filters.frontmatterImageProps = parseLines(value);
+            const feedId = filters === this.plugin.data.settings ? 'default' : filters.id;
+            for (const preview of Object.values(this.plugin.getFeedPreviews(feedId))) {
+              preview.mtime = 0;
+            }
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Frontmatter properties before preview')
+      .setDesc(
+        'Property names to render before the note body (one per line)'
+      )
+      .addTextArea((text) =>
+        text
+          .setPlaceholder('title\nsource\nauthor')
+          .setValue(
+            filters.frontmatterBeforeProps.join('\n')
+          )
+          .onChange(async (value) => {
+            filters.frontmatterBeforeProps = parseLines(value);
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Frontmatter properties after preview')
+      .setDesc(
+        'Property names to render after the note body (one per line)'
+      )
+      .addTextArea((text) =>
+        text
+          .setPlaceholder('source\nauthor\npublished')
+          .setValue(
+            filters.frontmatterAfterProps.join('\n')
+          )
+          .onChange(async (value) => {
+            filters.frontmatterAfterProps = parseLines(value);
+            await this.saveFeedSettings(filters);
+          })
+      );
+
   }
 
   private renderFeedFilters(
@@ -726,7 +718,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     filters: FeedFilters
   ): void {
     const feedGroup = containerEl.createDiv('doomscroll-feed-filters');
-    new Setting(feedGroup).setName(heading).setHeading();
 
     const nameSetting = new Setting(feedGroup)
       .setName('Name')

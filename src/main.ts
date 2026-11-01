@@ -2,6 +2,7 @@ import { Plugin, normalizePath } from 'obsidian';
 import { FeedFilters, isPreviewSize, PluginData, StoredNotePreview } from './types';
 import { DEFAULT_SETTINGS, DoomscrollSettingTab } from './settings';
 import { Indexer } from './indexer';
+import { uuidv7 } from './uuid';
 import { DoomscrollView, VIEW_TYPE_DOOMSCROLL } from './view';
 
 const INDEX_FORMAT_VERSION = 3;
@@ -73,6 +74,32 @@ export default class DoomscrollPlugin extends Plugin {
       this.data.settings.name = 'Default feed';
       migrated = true;
     }
+    if (!this.data.settings.id) {
+      this.data.settings.id = uuidv7();
+      migrated = true;
+    }
+    const legacyIds = this.data.settings.legacyFeedIds ??= {};
+    this.data.settings.additionalFeeds.forEach((feed, index) => {
+      if (!feed.id) {
+        feed.id = uuidv7();
+        const oldId = `additional-${index}`;
+        legacyIds[oldId] = feed.id;
+        const previews = this.data.feedPreviews[oldId];
+        if (previews) this.data.feedPreviews[feed.id] = previews;
+        delete this.data.feedPreviews[oldId];
+        migrated = true;
+      }
+    });
+    const feedOptionKeys = ['includeMediaOnlyNotes', 'showNonMarkdownFiles', 'simplifiedView', 'previewSize', 'openNoteBehavior', 'frontmatterImageProps', 'frontmatterBeforeProps', 'frontmatterAfterProps'] as const;
+    this.data.settings.additionalFeeds.forEach((feed) => {
+      for (const key of feedOptionKeys) {
+        if (feed[key] === undefined) {
+          const value = this.data.settings[key];
+          Object.assign(feed, { [key]: Array.isArray(value) ? [...value] : value });
+          migrated = true;
+        }
+      }
+    });
     this.data.settings.additionalFeeds.forEach((feed, index) => {
       if (typeof feed.name !== 'string') {
         feed.name = `Feed ${index + 1}`;
@@ -238,9 +265,12 @@ export default class DoomscrollPlugin extends Plugin {
 
   getFeedFilters(feedId = 'default'): FeedFilters {
     if (feedId === 'default') return this.data.settings;
-    const match = /^additional-(\d+)$/.exec(feedId);
-    const index = match ? Number(match[1]) : -1;
-    return this.data.settings.additionalFeeds[index] ?? this.data.settings;
+    const id = this.resolveFeedId(feedId);
+    return this.data.settings.additionalFeeds.find((feed) => feed.id === id) ?? this.data.settings;
+  }
+
+  resolveFeedId(feedId: string): string {
+    return this.data.settings.legacyFeedIds?.[feedId] ?? feedId;
   }
 
   getFeedPreviews(
@@ -253,24 +283,15 @@ export default class DoomscrollPlugin extends Plugin {
   async removeAdditionalFeed(index: number): Promise<void> {
     const feeds = this.data.settings.additionalFeeds;
     if (index < 0 || index >= feeds.length) return;
+    const feed = feeds[index];
+    if (!feed) return;
     const views = this.app.workspace.getLeavesOfType(VIEW_TYPE_DOOMSCROLL)
       .map((leaf) => leaf.view)
-      .filter((view): view is DoomscrollView => view instanceof DoomscrollView)
-      .map((view) => ({ view, id: view.getFeedId() }));
+      .filter((view): view is DoomscrollView => view instanceof DoomscrollView);
     feeds.splice(index, 1);
-    delete this.data.feedPreviews[`additional-${index}`];
-    for (let i = index + 1; i <= feeds.length; i++) {
-      const oldId = `additional-${i}`;
-      const newId = `additional-${i - 1}`;
-      if (this.data.feedPreviews[oldId]) this.data.feedPreviews[newId] = this.data.feedPreviews[oldId];
-      delete this.data.feedPreviews[oldId];
-    }
-    for (const { view, id } of views) {
-      const match = /^additional-(\d+)$/.exec(id);
-      if (!match) continue;
-      const oldIndex = Number(match[1]);
-      if (oldIndex === index) await view.activateFeed('default');
-      else if (oldIndex > index) await view.activateFeed(`additional-${oldIndex - 1}`);
+    delete this.data.feedPreviews[feed.id];
+    for (const view of views) {
+      if (view.getFeedId() === feed.id) await view.activateFeed('default');
     }
     await this.saveSettings();
     this.refreshFeedCommands();
@@ -289,7 +310,7 @@ export default class DoomscrollPlugin extends Plugin {
         fallbackName: 'Default feed',
       },
       ...this.data.settings.additionalFeeds.map((filters, index) => ({
-        id: `additional-${index}`,
+        id: filters.id,
         filters,
         fallbackName: `Feed ${index + 1}`,
       })),
