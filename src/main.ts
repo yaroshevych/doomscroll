@@ -5,7 +5,7 @@ import { Indexer } from './indexer';
 import { uuidv7 } from './uuid';
 import { DoomscrollView, VIEW_TYPE_DOOMSCROLL } from './view';
 
-const INDEX_FORMAT_VERSION = 3;
+const INDEX_FORMAT_VERSION = 4;
 
 export default class DoomscrollPlugin extends Plugin {
   data!: PluginData;
@@ -185,9 +185,8 @@ export default class DoomscrollPlugin extends Plugin {
     }
 
     if (this.data.indexFormatVersion !== INDEX_FORMAT_VERSION) {
-      // Rebuild all cached metadata once. This also repairs data written by
-      // the intermediate on-demand-preview migration, which removed legacy
-      // snippets before mediaOnly classification was persisted.
+      // Rebuild cached metadata to apply the current image selection and
+      // repair older media-only classifications.
       for (const previews of [this.data.previews, ...Object.values(this.data.feedPreviews)]) {
         for (const preview of Object.values(previews)) {
           preview.mtime = 0;

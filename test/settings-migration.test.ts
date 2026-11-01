@@ -85,7 +85,7 @@ test('migrates 0.2.0 single-feed settings and preserves them after restart', asy
     additionalFeeds: [], legacyFeedIds: {},
   });
   assert.match(plugin.data.settings.id, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-  assert.deepEqual(plugin.getFeedPreviews('default'), previews);
+  assert.deepEqual(plugin.getFeedPreviews('default'), { 'Work.md': { ...previews['Work.md'], mtime: 0 } });
   assert.deepEqual(plugin.data.feedPreviews, {});
   assert.deepEqual(plugin.data.history, history);
   assert.equal(plugin.saved.length, 1);

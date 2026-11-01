@@ -45,10 +45,15 @@ export function extractImage(
   frontmatter: Record<string, unknown> | undefined,
   frontmatterImageProps: string[]
 ): string | null {
-  // Prefer an image embedded in the note body over a frontmatter cover.
+  const frontmatterImage = extractFrontmatterImages(frontmatter, frontmatterImageProps)[0];
+  if (frontmatterImage) return frontmatterImage;
+
+  // Search the body only, so unconfigured frontmatter properties do not
+  // accidentally supply an image through their Markdown or wikilink syntax.
+  const body = content.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, '');
   const markdownImageRe = /!\[.*?\]\(([^)]+)\)/g;
   let mdMatch: RegExpExecArray | null;
-  while ((mdMatch = markdownImageRe.exec(content))) {
+  while ((mdMatch = markdownImageRe.exec(body))) {
     if (hasImageExtension(mdMatch[1]!)) {
       return mdMatch[1]!;
     }
@@ -57,7 +62,7 @@ export function extractImage(
   // Check for wikilink embed: ![[file.ext]] — first one with an image extension
   const wikiImageRe = /!\[\[([^\]]+)\]\]/g;
   let wikiMatch: RegExpExecArray | null;
-  while ((wikiMatch = wikiImageRe.exec(content))) {
+  while ((wikiMatch = wikiImageRe.exec(body))) {
     const imagePath = wikiMatch[1]!.split('|')[0]!; // strip piped syntax like ![[path|width]]
     if (hasImageExtension(imagePath)) {
       return imagePath;
@@ -65,13 +70,12 @@ export function extractImage(
   }
 
   // Check for raw <img src="..."> (assume genuine image tags are always images)
-  const htmlImageMatch = content.match(/<img\s+src="([^"]+)"/);
+  const htmlImageMatch = body.match(/<img\s+src="([^"]+)"/);
   if (htmlImageMatch) {
     return htmlImageMatch[1]!;
   }
 
-  // Fall back to the first image in the configured frontmatter properties.
-  return extractFrontmatterImages(frontmatter, frontmatterImageProps)[0] ?? null;
+  return null;
 }
 
 export function extractSnippet(content: string): string {
