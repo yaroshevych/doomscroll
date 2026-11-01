@@ -541,9 +541,7 @@
   max-width: none;
 }
 
-.is-mobile .doomscroll-feed-filters .setting-item-control:has(textarea),
 .is-mobile .doomscroll-feed-filters .setting-item-control textarea,
-.is-mobile .doomscroll-feed-option .setting-item-control:has(textarea),
 .is-mobile .doomscroll-feed-option .setting-item-control textarea {
   width: 100%;
   max-width: none;

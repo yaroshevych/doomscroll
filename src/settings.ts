@@ -67,7 +67,7 @@ class DeleteFeedModal extends Modal {
     });
     new Setting(this.contentEl)
       .addButton((button) => button.setButtonText('Cancel').onClick(() => this.close()))
-      .addButton((button) => button.setButtonText('Delete feed').setWarning().onClick(() => {
+      .addButton((button) => button.setButtonText('Delete feed').setDestructive().onClick(() => {
         this.close();
         this.onConfirm();
       }));
@@ -81,7 +81,7 @@ class ResetFeedModal extends Modal {
     this.contentEl.createEl('p', { text: 'This will replace this feed’s name, filters, and display options with their default values.' });
     new Setting(this.contentEl)
       .addButton((button) => button.setButtonText('Cancel').onClick(() => this.close()))
-      .addButton((button) => button.setButtonText('Reset to defaults').setWarning().onClick(() => {
+      .addButton((button) => button.setButtonText('Reset to defaults').setDestructive().onClick(() => {
         this.close();
         this.onConfirm();
       }));
@@ -187,12 +187,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       const pageActions: SettingGroupItem[] = feed === this.plugin.data.settings
         ? [{ name: 'Reset action', render: (setting: Setting) => {
             setting.setName('').addButton((button) => button
-              .setButtonText('Reset to defaults').setWarning()
+              .setButtonText('Reset to defaults').setDestructive()
               .onClick(() => new ResetFeedModal(this.app, () => { void this.resetDefaultFeed(); }).open()));
           } }]
         : [{ name: 'Delete action', render: (setting: Setting) => {
             setting.setName('').addButton((button) => button
-              .setButtonText('Delete feed').setWarning()
+              .setButtonText('Delete feed').setDestructive()
               .onClick(() => this.confirmDeleteFeed(feed, setting.settingEl.closest('.setting-page'))));
           } }];
       feedItems.push({ type: 'page', name, items: [group, ...pageActions] });
@@ -376,10 +376,9 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         name: 'Add folder',
         action: () => { new AddExcludedFolderModal(this.app, this, filters).open(); },
       },
-      onDelete: async (index) => {
+      onDelete: (index) => {
         filters.excludeFolders.splice(index, 1);
-        await this.saveFeedSettings(filters);
-        this.update();
+        void this.saveExcludedFolders(filters);
       },
     } satisfies SettingDefinitionList;
   }

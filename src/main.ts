@@ -188,12 +188,10 @@ export default class DoomscrollPlugin extends Plugin {
       // Rebuild all cached metadata once. This also repairs data written by
       // the intermediate on-demand-preview migration, which removed legacy
       // snippets before mediaOnly classification was persisted.
-      const allPreviews = [
-        ...Object.values(this.data.previews),
-        ...Object.values(this.data.feedPreviews).flatMap(Object.values),
-      ];
-      for (const preview of allPreviews) {
-        preview.mtime = 0;
+      for (const previews of [this.data.previews, ...Object.values(this.data.feedPreviews)]) {
+        for (const preview of Object.values(previews)) {
+          preview.mtime = 0;
+        }
       }
       this.data.indexFormatVersion = INDEX_FORMAT_VERSION;
       migrated = true;
