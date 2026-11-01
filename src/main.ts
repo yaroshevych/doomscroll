@@ -203,6 +203,9 @@ export default class DoomscrollPlugin extends Plugin {
 
     // Instantiate indexer
     this.indexer = new Indexer(this.app, this.data);
+    this.registerEvent(this.app.metadataCache.on('changed', () => {
+      this.indexer.markDirty();
+    }));
 
     // Register view
     this.registerView(

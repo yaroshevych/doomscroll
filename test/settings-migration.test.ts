@@ -19,7 +19,7 @@ const bundle = await build({
         namespace: 'host-stub',
       }));
       build.onLoad({ filter: /.*/, namespace: 'host-stub' }, (args) => {
-        if (args.path === './indexer') return { contents: 'export class Indexer {}' };
+        if (args.path === './indexer') return { contents: 'export class Indexer { dirty = 0; markDirty() { this.dirty++; } }' };
         if (args.path === './view') return { contents: "export class DoomscrollView {} ; export const VIEW_TYPE_DOOMSCROLL = 'doomscroll-view'" };
         return { contents: `
           export class Plugin {
@@ -27,6 +27,7 @@ const bundle = await build({
             async loadData() { return structuredClone(this.loaded); }
             async saveData(data) { this.saved.push(structuredClone(data)); }
             registerView() {}
+            registerEvent() {}
             addRibbonIcon() {}
             addCommand(command) { this.commands.push(command); return command; }
             addSettingTab(tab) { this.settingTab = tab; }
@@ -46,11 +47,22 @@ const bundle = await build({
 const { default: DoomscrollPlugin } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0]!.contents).toString('base64')}`);
 
 async function start(loaded: unknown) {
-  const plugin = new DoomscrollPlugin({ workspace: { getLeavesOfType: () => [] } });
+  const listeners: Record<string, (...args: unknown[]) => void> = {};
+  const plugin = new DoomscrollPlugin({
+    workspace: { getLeavesOfType: () => [] },
+    metadataCache: { on: (event: string, callback: (...args: unknown[]) => void) => { listeners[event] = callback; } },
+  });
+  plugin.listeners = listeners;
   plugin.loaded = loaded;
   await plugin.onload();
   return plugin;
 }
+
+test('note metadata changes invalidate feed indexes even when no feed is open', async () => {
+  const plugin = await start(null);
+  plugin.listeners.changed();
+  assert.equal(plugin.indexer.dirty, 1);
+});
 
 test('migrates 0.2.0 single-feed settings and preserves them after restart', async () => {
   // All fields correspond to the single-feed settings shipped in 0.2.0.
