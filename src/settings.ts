@@ -5,12 +5,14 @@ import {
   Notice,
   normalizePath,
   PluginSettingTab,
+  Platform,
   requireApiVersion,
   Setting,
   type SettingDefinitionItem,
   type SettingGroupItem,
 } from 'obsidian';
 import DoomscrollPlugin from './main';
+import { ShortcutsModal } from './help';
 import { uuidv7 } from './uuid';
 import { FeedFilters, isPreviewSize, PluginSettings } from './types';
 
@@ -197,7 +199,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     definitions.push({
       type: 'group',
       items: [
-        { name: 'Help & support', render: (setting) => configureGitHubLinks(setting) },
+        { name: 'Help & support', render: (setting) => configureGitHubLinks(setting, this.app) },
       ],
     });
 
@@ -630,7 +632,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     new Setting(feedsGroup).setClass('doomscroll-add-feed').addButton((button) =>
       button.setButtonText('Add Feed').onClick(() => { void this.addFeed(); })
     );
-    configureGitHubLinks(new Setting(containerEl));
+    configureGitHubLinks(new Setting(containerEl), this.app);
   }
 
   private displayLegacyFeedsPage(): void {
@@ -977,7 +979,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
 const FEEDS_DESCRIPTION = 'Doomscroll start with one default feed, which you can rename and configure. Add more feeds with custom content filters and preview settings. For example: custom feeds for journal and books notes.';
 
-function configureGitHubLinks(setting: Setting): void {
+function configureGitHubLinks(setting: Setting, app: App): void {
   setting
     .setClass('doomscroll-github-links')
     .setName('Help & support')
@@ -991,6 +993,11 @@ function configureGitHubLinks(setting: Setting): void {
         window.open(ISSUES_URL, '_blank');
       })
     );
+  if (!Platform.isMobile || Platform.isTablet) {
+    setting.addButton((button) => button.setButtonText('Keyboard shortcuts').onClick(() => {
+      new ShortcutsModal(app).open();
+    }));
+  }
 }
 
 function parseLines(value: string): string[] {
