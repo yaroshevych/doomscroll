@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { PluginData, StoredNotePreview } from './types';
+import { FeedFilters, PluginData, StoredNotePreview } from './types';
 import {
   extractImage,
   extractFrontmatterImages,
@@ -15,9 +15,9 @@ const INDEX_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 export class Indexer {
   app: App;
   data: PluginData;
-  private lastRefreshStartedAt = 0;
-  private lastIndexedSettingsKey: string | null = null;
-  private refreshPromise: Promise<void> | null = null;
+  private lastRefreshStartedAt = new Map<string, number>();
+  private lastIndexedSettingsKey = new Map<string, string>();
+  private refreshPromises = new Map<string, Promise<void>>();
 
   constructor(app: App, data: PluginData) {
     this.app = app;
@@ -25,56 +25,68 @@ export class Indexer {
   }
 
   markDirty(): void {
-    this.lastRefreshStartedAt = 0;
+    this.lastRefreshStartedAt.clear();
   }
 
   async refreshIfStale(
     onProgress?: (done: number, total: number) => void,
-    force = false
+    force = false,
+    filters: FeedFilters = this.data.settings,
+    feedId = 'default'
   ): Promise<boolean> {
-    if (this.refreshPromise) {
-      await this.refreshPromise;
+    const runningRefresh = this.refreshPromises.get(feedId);
+    if (runningRefresh) {
+      await runningRefresh;
       // The caller waited for another refresh; it did not start one itself.
       return false;
     }
 
-    const settingsKey = this.getIndexSettingsKey();
-    const settingsChanged = settingsKey !== this.lastIndexedSettingsKey;
+    const settingsKey = this.getIndexSettingsKey(filters);
+    const settingsChanged =
+      settingsKey !== this.lastIndexedSettingsKey.get(feedId);
+    const lastRefreshStartedAt = this.lastRefreshStartedAt.get(feedId) ?? 0;
 
     if (
       !force &&
       !settingsChanged &&
-      Date.now() - this.lastRefreshStartedAt < INDEX_REFRESH_INTERVAL_MS
+      Date.now() - lastRefreshStartedAt < INDEX_REFRESH_INTERVAL_MS
     ) {
       return false;
     }
 
-    this.lastRefreshStartedAt = Date.now();
-    this.refreshPromise = this.buildOrUpdateIndex(onProgress);
+    this.lastRefreshStartedAt.set(feedId, Date.now());
+    const refreshPromise = this.buildOrUpdateIndex(
+      onProgress,
+      filters,
+      feedId
+    );
+    this.refreshPromises.set(feedId, refreshPromise);
 
     try {
-      await this.refreshPromise;
+      await refreshPromise;
       // Keep the key captured at refresh start. If settings changed while an
       // index was being built, the next refresh will rebuild for the new key.
-      this.lastIndexedSettingsKey = settingsKey;
+      this.lastIndexedSettingsKey.set(feedId, settingsKey);
       return true;
     } finally {
-      this.refreshPromise = null;
+      if (this.refreshPromises.get(feedId) === refreshPromise) {
+        this.refreshPromises.delete(feedId);
+      }
     }
   }
 
-  private getIndexSettingsKey(): string {
+  private getIndexSettingsKey(filters: FeedFilters): string {
     return JSON.stringify({
-      excludeFolders: this.data.settings.excludeFolders,
-      excludeTags: this.data.settings.excludeTags,
-      excludeGlobs: this.data.settings.excludeGlobs,
-      searchQuery: this.data.settings.searchQuery,
+      excludeFolders: filters.excludeFolders,
+      excludeTags: filters.excludeTags,
+      excludeGlobs: filters.excludeGlobs,
+      searchQuery: filters.searchQuery,
       frontmatterImageProps: this.data.settings.frontmatterImageProps,
       showNonMarkdownFiles: this.data.settings.showNonMarkdownFiles,
     });
   }
 
-  getCandidateFiles(): TFile[] {
+  getCandidateFiles(filters: FeedFilters = this.data.settings): TFile[] {
     const candidates: TFile[] = [];
     const allFiles = this.app.vault.getFiles();
     const referencedAttachmentPaths = new Set<string>();
@@ -120,12 +132,12 @@ export class Indexer {
         }
       }
     }
-    const excludeFolders = this.data.settings.excludeFolders
+    const excludeFolders = filters.excludeFolders
       .map((folderPath) => folderPath.replace(/\/+$/, ''))
       .filter((folderPath) => folderPath.length > 0);
-    const excludeGlobs = this.data.settings.excludeGlobs.map(compileGlob);
+    const excludeGlobs = filters.excludeGlobs.map(compileGlob);
     const excludeTags = new Set(
-      this.data.settings.excludeTags.map((tag) => tag.toLowerCase())
+      filters.excludeTags.map((tag) => tag.toLowerCase())
     );
 
     for (const file of allFiles) {
@@ -227,12 +239,22 @@ export class Indexer {
     return candidates;
   }
 
+  private getPreviewCache(
+    feedId: string
+  ): Record<string, StoredNotePreview> {
+    if (feedId === 'default') return this.data.previews;
+    return (this.data.feedPreviews[feedId] ??= {});
+  }
+
   async buildOrUpdateIndex(
-    onProgress?: (done: number, total: number) => void
+    onProgress?: (done: number, total: number) => void,
+    filters: FeedFilters = this.data.settings,
+    feedId = 'default'
   ): Promise<void> {
-    const candidates = this.getCandidateFiles();
+    const candidates = this.getCandidateFiles(filters);
     const total = candidates.length;
-    const searchQuery = this.data.settings.searchQuery.trim();
+    const searchQuery = filters.searchQuery.trim();
+    const previews = this.getPreviewCache(feedId);
     const matchedCandidatePaths = new Set<string>();
 
     // Keep reads parallel but bounded for mobile devices and large notes.
@@ -261,13 +283,13 @@ export class Indexer {
 
             matchedCandidatePaths.add(file.path);
             if (
-              this.data.previews[file.path]?.mtime === file.stat.mtime &&
-              this.data.previews[file.path]?.attachment
+              previews[file.path]?.mtime === file.stat.mtime &&
+              previews[file.path]?.attachment
             ) {
               return;
             }
 
-            this.data.previews[file.path] = {
+            previews[file.path] = {
               mtime: file.stat.mtime,
               mediaOnly: true,
               attachment: true,
@@ -293,7 +315,7 @@ export class Indexer {
           matchedCandidatePaths.add(file.path);
 
           // Check if cached preview is still valid
-          if (this.data.previews[file.path]?.mtime === file.stat.mtime) {
+          if (previews[file.path]?.mtime === file.stat.mtime) {
             // Reuse cached preview
             return;
           }
@@ -321,7 +343,7 @@ export class Indexer {
             ...(mediaOnly ? { mediaOnly: true as const } : {}),
           };
 
-          this.data.previews[file.path] = preview;
+          previews[file.path] = preview;
         })
       );
 
@@ -335,11 +357,11 @@ export class Indexer {
 
     // Remove stale entries
     const candidatePaths = matchedCandidatePaths;
-    const previewKeys = Object.keys(this.data.previews);
+    const previewKeys = Object.keys(previews);
 
     for (const path of previewKeys) {
       if (!candidatePaths.has(path)) {
-        delete this.data.previews[path];
+        delete previews[path];
       }
     }
   }

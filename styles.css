@@ -512,12 +512,43 @@
   margin-top: 1rem;
 }
 
-.doomscroll-excluded-folders-list {
-  margin: 0 0 1rem;
-  overflow: hidden;
+.doomscroll-feeds-group {
+  margin-top: var(--size-4-8);
+  padding: 0;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   background: var(--background-secondary);
+}
+
+.doomscroll-feeds-group .setting-item-heading {
+  padding: var(--setting-items-padding-y) var(--setting-items-padding-x) 0;
+}
+
+.doomscroll-add-feed .setting-item-info {
+  display: none;
+}
+
+.doomscroll-add-feed .setting-item-control {
+  margin-inline-start: auto;
+}
+
+.doomscroll-feeds-description .setting-item-name {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-normal);
+}
+
+.doomscroll-feed-filters {
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+
+.doomscroll-excluded-folders-list {
+  margin: 0;
+  overflow: hidden;
 }
 
 .doomscroll-excluded-folder-item {

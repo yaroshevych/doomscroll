@@ -7,9 +7,10 @@ import {
   requireApiVersion,
   Setting,
   type SettingDefinitionItem,
+  type SettingGroupItem,
 } from 'obsidian';
 import DoomscrollPlugin from './main';
-import { isPreviewSize, PluginSettings } from './types';
+import { FeedFilters, isPreviewSize, PluginSettings } from './types';
 
 const GITHUB_URL = 'https://github.com/yaroshevych/doomscroll';
 const ISSUES_URL = `${GITHUB_URL}/issues`;
@@ -51,6 +52,7 @@ class FolderSuggest extends AbstractInputSuggest<string> {
 }
 
 export const DEFAULT_SETTINGS: PluginSettings = {
+  name: 'Default feed',
   batchSize: 20,
   infiniteScroll: false,
   headerScrollsWithFeed: false,
@@ -67,10 +69,12 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   frontmatterImageProps: ['cover', 'image', 'banner'],
   frontmatterBeforeProps: [],
   frontmatterAfterProps: [],
+  additionalFeeds: [],
 };
 
 export class DoomscrollSettingTab extends PluginSettingTab {
   plugin: DoomscrollPlugin;
+  private legacyFeed: FeedFilters | null = null;
 
   constructor(app: App, plugin: DoomscrollPlugin) {
     super(app, plugin);
@@ -78,7 +82,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   }
 
   getSettingDefinitions(): SettingDefinitionItem[] {
-    return [
+    const definitions: SettingDefinitionItem[] = [
       {
         name: 'Doomscroll settings',
         render: (setting) => configureHeader(setting),
@@ -133,15 +137,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         },
       },
       {
-        name: 'Search query',
-        desc: 'Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]',
-        control: {
-          type: 'text',
-          key: 'searchQuery',
-          placeholder: 'tag:#work [status:Draft]',
-        },
-      },
-      {
         name: 'Open notes in',
         desc: 'Choose where a card opens',
         control: {
@@ -149,16 +144,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           key: 'openNoteBehavior',
           options: { tab: 'New tab', reuse: 'Reuse current tab', window: 'New window' },
         },
-      },
-      {
-        name: 'Exclude tags',
-        desc: 'Tags to skip without # (one per line)',
-        control: { type: 'textarea', key: 'excludeTags' },
-      },
-      {
-        name: 'Exclude filename patterns',
-        desc: 'Filename patterns to skip (one per line, e.g., _*)',
-        control: { type: 'textarea', key: 'excludeGlobs' },
       },
       {
         name: 'Frontmatter image properties',
@@ -175,44 +160,200 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         desc: 'Property names to render after the note body (one per line)',
         control: { type: 'textarea', key: 'frontmatterAfterProps' },
       },
-      {
-        name: 'Excluded folders',
-        render: (setting) => {
-          setting.setName('Excluded folders').setHeading();
-          const list = setting.settingEl.createDiv(
-            'doomscroll-excluded-folders-list'
-          );
-          this.renderExcludedFolders(list);
-        },
-      },
-      {
-        name: 'Add excluded folder',
-        desc: 'Folders to skip (type or choose a folder)',
-        render: (setting) => {
-          setting.setName('Add excluded folder').setDesc('Folders to skip (type or choose a folder)');
-          let folderInputEl: HTMLInputElement | null = null;
-          setting.addText((text) => {
-            text.setPlaceholder('4. Archive');
-            folderInputEl = text.inputEl;
-            new FolderSuggest(this.app, text.inputEl);
-          });
-          setting.addButton((button) =>
-            button.setButtonText('Add').onClick(() => {
-              const folder = normalizeFolderPath(folderInputEl?.value ?? '');
-              if (!folder || folder === '.') {
-                new Notice('Excluded folder path cannot be empty or the vault root');
-                return;
-              }
-              if (this.plugin.data.settings.excludeFolders.includes(folder)) {
-                new Notice('That folder is already excluded');
-                return;
-              }
-              void this.addExcludedFolder(folder, folderInputEl);
-            })
-          );
-        },
-      },
     ];
+
+    const feedItems: SettingGroupItem[] = [
+      { name: 'About feeds', render: (setting) => {
+        setting.setName(FEEDS_DESCRIPTION).setClass('doomscroll-feeds-description');
+      } },
+    ];
+    const usedNames = new Set<string>();
+    const addFeedPage = (fallback: string, feed: FeedFilters) => {
+      const base = feed.name.trim() || fallback;
+      let name = base;
+      let suffix = 2;
+      while (usedNames.has(name)) name = `${base} (${suffix++})`;
+      usedNames.add(name);
+      const group = this.createFeedDefinition(fallback, feed);
+      feedItems.push({ type: 'page', name, items: [group, ...(feed === this.plugin.data.settings ? [] : [{
+        name: 'Delete feed',
+        render: (setting: Setting) => { setting.setName('Delete feed').addButton((button) =>
+          button.setButtonText('Delete feed').setWarning().onClick(() => { void this.deleteFeed(feed); })
+        ); },
+      }])] });
+    };
+    addFeedPage('Default feed', this.plugin.data.settings);
+    this.plugin.data.settings.additionalFeeds.forEach((feed, index) => {
+      addFeedPage(`Feed ${index + 1}`, feed);
+    });
+    feedItems.push({
+      name: 'Add Feed',
+      render: (setting) => {
+        setting.setClass('doomscroll-add-feed').addButton((button) =>
+          button.setButtonText('Add Feed').onClick(() => {
+            void this.addFeed();
+          })
+        );
+      },
+    });
+    definitions.push({ type: 'group', heading: 'Feeds', cls: 'doomscroll-feeds-group', items: feedItems });
+
+    return definitions;
+  }
+
+  private createFeedDefinition(
+    heading: string,
+    filters: FeedFilters
+  ): SettingDefinitionItem {
+    return {
+      type: 'group',
+      heading: filters.name.trim() || heading,
+      cls: 'doomscroll-feed-filters',
+      items: [
+        {
+          name: 'Name',
+          render: (setting) => {
+            setting
+              .setName('Name')
+              .addText((text) =>
+                text
+                  .setValue(filters.name)
+                  .onChange(async (value) => {
+                    filters.name = value;
+                    await this.plugin.saveSettings();
+                  })
+              );
+            setting.settingEl
+              .querySelector('input')
+              ?.addEventListener('blur', () => {
+                this.plugin.refreshFeedCommands();
+                this.refreshDeclarativeSettings();
+              });
+          },
+        },
+        {
+          name: 'Search query',
+          render: (setting) => {
+            setting
+              .setName('Search query')
+              .setDesc('Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]')
+              .addText((text) =>
+                text
+                  .setPlaceholder('tag:#work [status:Draft]')
+                  .setValue(filters.searchQuery)
+                  .onChange(async (value) => {
+                    filters.searchQuery = value;
+                    await this.saveFeedSettings(filters);
+                  })
+              );
+          },
+        },
+        {
+          name: 'Exclude tags',
+          render: (setting) => {
+            setting
+              .setName('Exclude tags')
+              .setDesc('Tags to skip without # (one per line)')
+              .addTextArea((text) =>
+                text
+                  .setValue(filters.excludeTags.join('\n'))
+                  .onChange(async (value) => {
+                    filters.excludeTags = parseLines(value);
+                    await this.saveFeedSettings(filters);
+                  })
+              );
+          },
+        },
+        {
+          name: 'Exclude filename patterns',
+          render: (setting) => {
+            setting
+              .setName('Exclude filename patterns')
+              .setDesc('Filename patterns to skip (one per line, e.g., _*)')
+              .addTextArea((text) =>
+                text
+                  .setValue(filters.excludeGlobs.join('\n'))
+                  .onChange(async (value) => {
+                    filters.excludeGlobs = parseLines(value);
+                    await this.saveFeedSettings(filters);
+                  })
+              );
+          },
+        },
+        {
+          name: 'Excluded folders',
+          render: (setting) => {
+            setting.setName('Excluded folders').setHeading();
+            const list = setting.settingEl.createDiv(
+              'doomscroll-excluded-folders-list'
+            );
+            this.renderExcludedFolders(list, filters);
+          },
+        },
+        {
+          name: 'Add excluded folder',
+          render: (setting) => {
+            setting
+              .setName('Add excluded folder')
+              .setDesc('Folders to exclude from this feed');
+            let inputEl: HTMLInputElement | null = null;
+            setting.addText((text) => {
+              text.setPlaceholder('4. Archive');
+              inputEl = text.inputEl;
+              new FolderSuggest(this.app, inputEl);
+            });
+            setting.addButton((button) =>
+              button.setButtonText('Add').onClick(() => {
+                const folder = normalizeFolderPath(inputEl?.value ?? '');
+                if (!folder || folder === '.') {
+                  new Notice('Excluded folder path cannot be empty or the vault root');
+                  return;
+                }
+                if (filters.excludeFolders.includes(folder)) {
+                  new Notice('That folder is already excluded');
+                  return;
+                }
+                filters.excludeFolders.push(folder);
+                void this.saveFeedSettings(filters).then(() => {
+                  if (inputEl) inputEl.value = '';
+                  this.refreshDeclarativeSettings();
+                });
+              })
+            );
+          },
+        },
+      ],
+    };
+  }
+
+  private async saveFeedSettings(filters: FeedFilters): Promise<void> {
+    if (filters === this.plugin.data.settings) {
+      await this.plugin.saveSettingsAndRefreshViews();
+    } else {
+      await this.plugin.saveSettings();
+    }
+  }
+
+  private async addFeed(): Promise<void> {
+    const defaults = this.plugin.data.settings;
+    this.plugin.data.settings.additionalFeeds.push({
+      name: `Feed ${this.plugin.data.settings.additionalFeeds.length + 1}`,
+      searchQuery: defaults.searchQuery,
+      excludeTags: [...defaults.excludeTags],
+      excludeGlobs: [...defaults.excludeGlobs],
+      excludeFolders: [...defaults.excludeFolders],
+    });
+    await this.plugin.saveSettings();
+    this.plugin.refreshFeedCommands();
+    this.refreshDeclarativeSettings();
+  }
+
+  private async deleteFeed(feed: FeedFilters): Promise<void> {
+    const index = this.plugin.data.settings.additionalFeeds.indexOf(feed);
+    if (index < 0) return;
+    this.legacyFeed = null;
+    await this.plugin.removeAdditionalFeed(index);
+    this.refreshDeclarativeSettings();
   }
 
   getControlValue(key: string): unknown {
@@ -328,10 +469,11 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
   private async addExcludedFolder(
     folder: string,
-    inputEl: HTMLInputElement | null
+    inputEl: HTMLInputElement | null,
+    filters: FeedFilters
   ): Promise<void> {
-    this.plugin.data.settings.excludeFolders.push(folder);
-    await this.plugin.saveSettingsAndRefreshViews();
+    filters.excludeFolders.push(folder);
+    await this.saveFeedSettings(filters);
     if (inputEl) inputEl.value = '';
     this.refreshDeclarativeSettings();
   }
@@ -339,23 +481,31 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   private refreshDeclarativeSettings(): void {
     if (requireApiVersion('1.13.0')) {
       this.update();
+    } else {
+      this.display();
     }
   }
 
   private async removeExcludedFolder(
     folder: string,
-    container: HTMLElement
+    container: HTMLElement,
+    filters: FeedFilters
   ): Promise<void> {
-    const index = this.plugin.data.settings.excludeFolders.indexOf(folder);
+    const index = filters.excludeFolders.indexOf(folder);
     if (index === -1) return;
-    this.plugin.data.settings.excludeFolders.splice(index, 1);
-    await this.plugin.saveSettingsAndRefreshViews();
-    this.renderExcludedFolders(container);
+    filters.excludeFolders.splice(index, 1);
+    await this.saveFeedSettings(filters);
+    this.renderExcludedFolders(container, filters);
   }
 
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+
+    if (this.legacyFeed) {
+      this.displayLegacyFeedsPage();
+      return;
+    }
 
     configureHeader(new Setting(containerEl));
 
@@ -468,21 +618,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName('Search query')
-      .setDesc(
-        'Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]'
-      )
-      .addText((text) =>
-        text
-          .setPlaceholder('tag:#work [status:Draft]')
-          .setValue(this.plugin.data.settings.searchQuery)
-          .onChange(async (value) => {
-            this.plugin.data.settings.searchQuery = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
       .setName('Open notes in')
       .setDesc('Choose where a card opens')
       .addDropdown((dropdown) =>
@@ -498,30 +633,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
               return;
             }
             this.plugin.data.settings.openNoteBehavior = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Exclude tags')
-      .setDesc('Tags to skip without # (one per line)')
-      .addTextArea((text) =>
-        text
-          .setValue(this.plugin.data.settings.excludeTags.join('\n'))
-          .onChange(async (value) => {
-            this.plugin.data.settings.excludeTags = parseLines(value);
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Exclude filename patterns')
-      .setDesc('Filename patterns to skip (one per line, e.g., _*)')
-      .addTextArea((text) =>
-        text
-          .setValue(this.plugin.data.settings.excludeGlobs.join('\n'))
-          .onChange(async (value) => {
-            this.plugin.data.settings.excludeGlobs = parseLines(value);
             await this.plugin.saveSettingsAndRefreshViews();
           })
       );
@@ -574,17 +685,111 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           })
       );
 
-    new Setting(containerEl).setName('Excluded folders').setHeading();
+    const feedsGroup = containerEl.createDiv('doomscroll-feeds-group');
+    new Setting(feedsGroup).setName('Feeds').setDesc(FEEDS_DESCRIPTION).setHeading();
+    const addFeedLink = (feed: FeedFilters, fallback: string) => {
+      new Setting(feedsGroup).setName(feed.name.trim() || fallback)
+        .addButton((button) => button.setButtonText('Configure').onClick(() => {
+          this.legacyFeed = feed;
+          this.display();
+        }));
+    };
+    addFeedLink(this.plugin.data.settings, 'Default feed');
+    this.plugin.data.settings.additionalFeeds.forEach((feed, index) => addFeedLink(feed, `Feed ${index + 1}`));
+    new Setting(feedsGroup).setClass('doomscroll-add-feed').addButton((button) =>
+      button.setButtonText('Add Feed').onClick(() => { void this.addFeed(); })
+    );
+  }
 
-    const excludedFoldersList = containerEl.createDiv(
+  private displayLegacyFeedsPage(): void {
+    const { containerEl } = this;
+    const feed = this.legacyFeed;
+    if (!feed) return;
+    new Setting(containerEl)
+      .setName(feed.name.trim() || 'Feed')
+      .setHeading()
+      .addButton((button) => button.setButtonText('Back').onClick(() => {
+        this.legacyFeed = null;
+        this.display();
+      }));
+    this.renderFeedFilters(containerEl, feed.name.trim() || 'Feed', feed);
+    if (feed !== this.plugin.data.settings) {
+      new Setting(containerEl).setName('Delete feed').addButton((button) =>
+        button.setButtonText('Delete feed').setWarning().onClick(() => { void this.deleteFeed(feed); })
+      );
+    }
+  }
+
+  private renderFeedFilters(
+    containerEl: HTMLElement,
+    heading: string,
+    filters: FeedFilters
+  ): void {
+    const feedGroup = containerEl.createDiv('doomscroll-feed-filters');
+    new Setting(feedGroup).setName(heading).setHeading();
+
+    const nameSetting = new Setting(feedGroup)
+      .setName('Name')
+      .addText((text) =>
+        text.setValue(filters.name).onChange(async (value) => {
+          filters.name = value;
+          await this.plugin.saveSettings();
+        })
+      );
+    nameSetting.controlEl.querySelector('input')?.addEventListener('blur', () => {
+      this.plugin.refreshFeedCommands();
+      this.refreshDeclarativeSettings();
+    });
+
+    new Setting(feedGroup)
+      .setName('Search query')
+      .setDesc(
+        'Filter notes using Obsidian-style search syntax, such as tag:#work or [status:Draft]'
+      )
+      .addText((text) =>
+        text
+          .setPlaceholder('tag:#work [status:Draft]')
+          .setValue(filters.searchQuery)
+          .onChange(async (value) => {
+            filters.searchQuery = value;
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(feedGroup)
+      .setName('Exclude tags')
+      .setDesc('Tags to skip without # (one per line)')
+      .addTextArea((text) =>
+        text
+          .setValue(filters.excludeTags.join('\n'))
+          .onChange(async (value) => {
+            filters.excludeTags = parseLines(value);
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(feedGroup)
+      .setName('Exclude filename patterns')
+      .setDesc('Filename patterns to skip (one per line, e.g., _*)')
+      .addTextArea((text) =>
+        text
+          .setValue(filters.excludeGlobs.join('\n'))
+          .onChange(async (value) => {
+            filters.excludeGlobs = parseLines(value);
+            await this.saveFeedSettings(filters);
+          })
+      );
+
+    new Setting(feedGroup).setName('Excluded folders').setHeading();
+    const excludedFoldersList = feedGroup.createDiv(
       'doomscroll-excluded-folders-list'
     );
-    this.renderExcludedFolders(excludedFoldersList);
+    this.renderExcludedFolders(excludedFoldersList, filters);
 
     let folderInputEl: HTMLInputElement;
-    new Setting(containerEl)
+    new Setting(feedGroup)
       .setName('Add excluded folder')
-      .setDesc('Folders to exclude from the feed')
+      .setDesc('Folders to exclude from this feed')
       .addText((text) => {
         text.setPlaceholder('4. Archive');
         folderInputEl = text.inputEl;
@@ -597,28 +802,27 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             new Notice('Excluded folder path cannot be empty or the vault root');
             return;
           }
-          if (this.plugin.data.settings.excludeFolders.includes(folder)) {
+          if (filters.excludeFolders.includes(folder)) {
             new Notice('That folder is already excluded');
             return;
           }
-
-          this.plugin.data.settings.excludeFolders.push(folder);
-          await this.plugin.saveSettingsAndRefreshViews();
-          folderInputEl.value = '';
-          this.renderExcludedFolders(excludedFoldersList);
+          await this.addExcludedFolder(folder, folderInputEl, filters);
         })
       );
   }
 
-  private renderExcludedFolders(container: HTMLElement): void {
+  private renderExcludedFolders(
+    container: HTMLElement,
+    filters: FeedFilters
+  ): void {
     container.empty();
 
-    if (this.plugin.data.settings.excludeFolders.length === 0) {
+    if (filters.excludeFolders.length === 0) {
       container.createDiv({ text: 'No excluded folders' });
       return;
     }
 
-    for (const folder of this.plugin.data.settings.excludeFolders) {
+    for (const folder of filters.excludeFolders) {
       const row = container.createDiv('doomscroll-excluded-folder-item');
       row.createSpan({ text: folder });
       row
@@ -628,12 +832,14 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           attr: { 'aria-label': `Remove excluded folder ${folder}` },
         })
         .addEventListener('click', () => {
-          void this.removeExcludedFolder(folder, container);
+          void this.removeExcludedFolder(folder, container, filters);
         });
     }
   }
 
 }
+
+const FEEDS_DESCRIPTION = 'You start with one default feed, which you can rename and configure. You can also add more feeds.';
 
 function configureHeader(setting: Setting): void {
   setting

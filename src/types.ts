@@ -1,7 +1,16 @@
 export type OpenNoteBehavior = 'tab' | 'reuse' | 'window';
 export type PreviewSize = 'small' | 'medium' | 'large';
 
+export interface FeedFilters {
+  name: string;
+  searchQuery: string;
+  excludeTags: string[];
+  excludeGlobs: string[];
+  excludeFolders: string[];
+}
+
 export interface PluginSettings {
+  name: string;
   batchSize: number;
   infiniteScroll: boolean;
   headerScrollsWithFeed: boolean;
@@ -18,6 +27,7 @@ export interface PluginSettings {
   frontmatterImageProps: string[];
   frontmatterBeforeProps: string[];
   frontmatterAfterProps: string[];
+  additionalFeeds: FeedFilters[];
 }
 
 export function isPreviewSize(value: unknown): value is PreviewSize {
@@ -58,6 +68,7 @@ export interface ViewHistoryEntry {
 export interface PluginData {
   settings: PluginSettings;
   previews: Record<string, StoredNotePreview>;
+  feedPreviews: Record<string, Record<string, StoredNotePreview>>;
   history: ViewHistoryEntry[];
   indexFormatVersion: number;
 }
