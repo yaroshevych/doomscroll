@@ -6,7 +6,6 @@ import {
   normalizePath,
   PluginSettingTab,
   Platform,
-  requireApiVersion,
   Setting,
   type SettingDefinitionList,
   type SettingDefinitionItem,
@@ -122,7 +121,6 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 
 export class DoomscrollSettingTab extends PluginSettingTab {
   plugin: DoomscrollPlugin;
-  private legacyFeed: FeedFilters | null = null;
   private legacyFrontmatter: string | null = null;
   private openPageNames = new Map<string, string>();
   private renameObservers = new Map<string, MutationObserver>();
@@ -130,29 +128,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: DoomscrollPlugin) {
     super(app, plugin);
     this.plugin = plugin;
-  }
-
-  openDebugFeedPage(feedId: string): boolean {
-    if (!this.containerEl.isConnected || !this.containerEl.isShown()) return false;
-    const feed = this.plugin.getFeedFilters(feedId);
-    if (!requireApiVersion('1.13.0')) {
-      this.legacyFeed = feed;
-      this.display();
-      return true;
-    }
-    const feeds = [this.plugin.data.settings, ...this.plugin.data.settings.additionalFeeds];
-    const index = feeds.indexOf(feed);
-    const group = this.getSettingDefinitions().find((item) =>
-      'type' in item && item.type === 'group' && item.items?.some((entry) => 'type' in entry && entry.type === 'page')
-    );
-    if (!group || !('items' in group) || !group.items || index < 0) return false;
-    const pages = group.items.filter((entry) => 'type' in entry && entry.type === 'page');
-    const page = pages[index];
-    if (!page || !('name' in page)) return false;
-    const setting = (this.app as unknown as { setting: { openPagePath?: (tab: string, path: string[]) => void } }).setting;
-    if (!setting.openPagePath) return false;
-    setting.openPagePath('doomscroll', [page.name]);
-    return true;
   }
 
   getSettingDefinitions(): SettingDefinitionItem[] {
@@ -347,13 +322,12 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     this.update();
   }
 
-  private createExcludedFoldersGroup(filters: FeedFilters): SettingGroupItem {
+  private createExcludedFoldersGroup(filters: FeedFilters): SettingDefinitionList {
     return {
       type: 'list',
       heading: 'Excluded folders',
       emptyState: 'No excluded folders',
-      searchable: false,
-      items: filters.excludeFolders.map((folder) => ({ name: folder, searchable: false })),
+      items: filters.excludeFolders.map((folder) => ({ name: folder })),
       addItem: {
         name: 'Add folder',
         action: () => { new AddExcludedFolderModal(this.app, this, filters).open(); },
@@ -413,10 +387,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
   private async deleteFeed(feed: FeedFilters, page: Element | null): Promise<void> {
     const index = this.plugin.data.settings.additionalFeeds.indexOf(feed);
     if (index < 0) return;
-    this.legacyFeed = null;
-    if (requireApiVersion('1.13.0')) {
-      page?.querySelector<HTMLElement>('.setting-page-back-button')?.click();
-    }
+    page?.querySelector<HTMLElement>('.setting-page-back-button')?.click();
     await this.plugin.removeAdditionalFeed(index);
     this.refreshDeclarativeSettings();
   }
@@ -532,162 +503,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     this.refreshDeclarativeSettings();
   }
 
-  private async addExcludedFolder(
-    folder: string,
-    inputEl: HTMLInputElement | null,
-    filters: FeedFilters
-  ): Promise<void> {
-    filters.excludeFolders.push(folder);
-    await this.saveFeedSettings(filters);
-    if (inputEl) inputEl.value = '';
-    this.refreshDeclarativeSettings();
-  }
-
-  private refreshDeclarativeSettings(): void {
-    if (requireApiVersion('1.13.0')) {
-      this.update();
-    } else {
-      this.display();
-    }
-  }
-
-  private async removeExcludedFolder(
-    folder: string,
-    container: HTMLElement,
-    filters: FeedFilters
-  ): Promise<void> {
-    const index = filters.excludeFolders.indexOf(folder);
-    if (index === -1) return;
-    filters.excludeFolders.splice(index, 1);
-    await this.saveFeedSettings(filters);
-    this.renderExcludedFolders(container, filters);
-  }
-
-  display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-
-    if (this.legacyFeed) {
-      this.displayLegacyFeedsPage();
-      return;
-    }
-
-    let batchSizeSetting: Setting | null = null;
-    new Setting(containerEl)
-      .setName('Infinite scrolling')
-      .setDesc('Automatically load more notes as you reach the end of the feed')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.data.settings.infiniteScroll)
-          .onChange(async (value) => {
-            this.plugin.data.settings.infiniteScroll = value;
-            batchSizeSetting?.setDisabled(value);
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    batchSizeSetting = new Setting(containerEl)
-      .setName('Batch size')
-      .setDesc('Number of cards to show per reshuffle. Does not apply while infinite scrolling is enabled.')
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOptions({ '10': '10', '20': '20', '50': '50', '100': '100' })
-          .setValue(String(this.plugin.data.settings.batchSize))
-          .onChange(async (value) => {
-            this.plugin.data.settings.batchSize = Number(value);
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-    batchSizeSetting.setDisabled(this.plugin.data.settings.infiniteScroll);
-
-    new Setting(containerEl)
-      .setName('Header scrolls with feed')
-      .setDesc('The header will scroll away from view')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.data.settings.headerScrollsWithFeed)
-          .onChange(async (value) => {
-            this.plugin.data.settings.headerScrollsWithFeed = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Reduce animation')
-      .setDesc('Disable card and scrolling animations during keyboard navigation')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.data.settings.reduceAnimations)
-          .onChange(async (value) => {
-            this.plugin.data.settings.reduceAnimations = value;
-            await this.plugin.saveSettingsAndRefreshViews();
-          })
-      );
-
-    const feedsGroup = containerEl.createDiv('doomscroll-feeds-group');
-    new Setting(feedsGroup).setName('Feeds').setDesc(FEEDS_DESCRIPTION);
-    const addFeedLink = (feed: FeedFilters, fallback: string) => {
-      new Setting(feedsGroup).setName(feed.name.trim() || fallback)
-        .addButton((button) => button.setButtonText('Configure').onClick(() => {
-          this.legacyFeed = feed;
-          this.display();
-        }));
-    };
-    addFeedLink(this.plugin.data.settings, 'Default feed');
-    this.plugin.data.settings.additionalFeeds.forEach((feed, index) => addFeedLink(feed, `Feed ${index + 1}`));
-    new Setting(feedsGroup).setClass('doomscroll-add-feed').addButton((button) =>
-      button.setButtonText('Add Feed').onClick(() => { void this.addFeed(); })
-    );
-    configureGitHubLinks(new Setting(containerEl), this.app);
-  }
-
-  private displayLegacyFeedsPage(): void {
-    const { containerEl } = this;
-    const feed = this.legacyFeed;
-    if (!feed) return;
-    new Setting(containerEl)
-      .setName(this.legacyFrontmatter || feed.name.trim() || 'Feed')
-      .setHeading()
-      .addButton((button) => button.setButtonText('Back').onClick(() => {
-        if (this.legacyFrontmatter) this.legacyFrontmatter = null;
-        else this.legacyFeed = null;
-        this.display();
-      }));
-    if (this.legacyFrontmatter === 'Exclusions') {
-      this.renderLegacyExclusions(containerEl, feed);
-      return;
-    }
-    if (this.legacyFrontmatter) {
-      for (const option of this.createFrontmatterOptions(feed)) {
-        option.render(new Setting(containerEl).setClass('doomscroll-large-text-editor'));
-      }
-      return;
-    }
-    this.renderFeedFilters(containerEl, feed.name.trim() || 'Feed', feed);
-    for (const option of this.createFeedOptions(feed)) {
-      option.render(new Setting(containerEl).setClass('doomscroll-feed-option'));
-    }
-    new Setting(containerEl)
-      .setName('Frontmatter')
-      .setDesc('Choose which frontmatter properties provide images and appear before or after note previews.')
-      .addButton((button) =>
-        button.setButtonText('Configure').onClick(() => {
-          this.legacyFrontmatter = 'Frontmatter';
-          this.display();
-        })
-      );
-    new Setting(containerEl).setName('Exclusions')
-      .setDesc('Exclude notes by tag, filename pattern, or folder.')
-      .addButton((button) => button.setButtonText('Configure').onClick(() => {
-        this.legacyFrontmatter = 'Exclusions';
-        this.display();
-      }));
-    if (feed !== this.plugin.data.settings) {
-      new Setting(containerEl).setName('Delete feed').addButton((button) =>
-        button.setButtonText('Delete feed').setWarning().onClick(() => { this.confirmDeleteFeed(feed, null); })
-      );
-    }
-  }
+  private refreshDeclarativeSettings(): void { this.update(); }
 
   private createFeedOptions(filters: FeedFilters): Array<{ name: string; render: (setting: Setting) => void }> {
     return [
@@ -858,126 +674,6 @@ export class DoomscrollSettingTab extends PluginSettingTab {
     ];
   }
 
-  private renderFeedFilters(
-    containerEl: HTMLElement,
-    heading: string,
-    filters: FeedFilters
-  ): void {
-    const feedGroup = containerEl.createDiv('doomscroll-feed-filters');
-
-    const nameSetting = new Setting(feedGroup)
-      .setName('Feed name')
-      .addText((text) =>
-        text.setValue(filters.name).onChange(async (value) => {
-          filters.name = value;
-          await this.plugin.saveSettings();
-        })
-      );
-    nameSetting.controlEl.querySelector('input')?.addEventListener('blur', () => {
-      this.plugin.refreshFeedCommands();
-      this.refreshDeclarativeSettings();
-    });
-
-    new Setting(feedGroup)
-      .setClass('doomscroll-search-query')
-      .setName('Search query')
-      .setDesc(
-        'Use Obsidian search syntax, such as tag:#work or [status:Draft]'
-      )
-      .addText((text) =>
-        text
-          .setPlaceholder('tag:#work [status:Draft]')
-          .setValue(filters.searchQuery)
-          .onChange(async (value) => {
-            filters.searchQuery = value;
-            await this.saveFeedSettings(filters);
-          })
-      );
-
-  }
-
-  private renderLegacyExclusions(containerEl: HTMLElement, filters: FeedFilters): void {
-    const feedGroup = containerEl.createDiv('doomscroll-feed-filters');
-    new Setting(feedGroup)
-      .setClass('doomscroll-large-text-editor')
-      .setName('Exclude tags')
-      .setDesc('Tags to skip without # (one per line)')
-      .addTextArea((text) =>
-        text
-          .setValue(filters.excludeTags.join('\n'))
-          .onChange(async (value) => {
-            filters.excludeTags = parseLines(value);
-            await this.saveFeedSettings(filters);
-          })
-      );
-
-    new Setting(feedGroup)
-      .setClass('doomscroll-large-text-editor')
-      .setName('Exclude filename patterns')
-      .setDesc('Filename patterns to skip (one per line, e.g., _*)')
-      .addTextArea((text) =>
-        text
-          .setValue(filters.excludeGlobs.join('\n'))
-          .onChange(async (value) => {
-            filters.excludeGlobs = parseLines(value);
-            await this.saveFeedSettings(filters);
-          })
-      );
-
-    const folderSetting = new Setting(feedGroup)
-      .setName('Excluded folders')
-      .setDesc('Folders excluded from this feed');
-    const panel = folderSetting.settingEl.createDiv('doomscroll-excluded-folders-panel');
-    const excludedFoldersList = panel.createDiv('doomscroll-excluded-folders-list');
-    this.renderExcludedFolders(excludedFoldersList, filters);
-
-    let folderInputEl: HTMLInputElement;
-    new Setting(feedGroup)
-      .setName('Add excluded folder')
-      .setDesc('Folders to exclude from this feed')
-      .addText((text) => {
-        text.setPlaceholder('4. Archive');
-        folderInputEl = text.inputEl;
-        new FolderSuggest(this.app, folderInputEl);
-      })
-      .addButton((button) =>
-        button.setButtonText('Add').onClick(async () => {
-          const folder = normalizeFolderPath(folderInputEl.value);
-          if (!folder || folder === '.') {
-            new Notice('Excluded folder path cannot be empty or the vault root');
-            return;
-          }
-          if (filters.excludeFolders.includes(folder)) {
-            new Notice('That folder is already excluded');
-            return;
-          }
-          await this.addExcludedFolder(folder, folderInputEl, filters);
-        })
-      );
-  }
-
-  private renderExcludedFolders(
-    container: HTMLElement,
-    filters: FeedFilters
-  ): void {
-    container.empty();
-
-    if (filters.excludeFolders.length === 0) {
-      container.createDiv({ text: 'No excluded folders' });
-      return;
-    }
-
-    for (const folder of filters.excludeFolders) {
-      new Setting(container)
-        .setName(folder)
-        .addButton((button) => button
-          .setIcon('trash-2')
-          .setTooltip(`Remove excluded folder ${folder}`)
-          .setWarning()
-          .onClick(() => { void this.removeExcludedFolder(folder, container, filters); })
-        );
-    }
-  }
 
 }
 

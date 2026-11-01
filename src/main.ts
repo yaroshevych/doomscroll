@@ -233,10 +233,11 @@ export default class DoomscrollPlugin extends Plugin {
         if (event.key !== ',' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat) return;
         const target = event.target;
         if (target instanceof HTMLElement && (target.isContentEditable || target.closest('input, textarea, select, [contenteditable="true"]'))) return;
-        if (this.feedSettingsTab.openDebugFeedPage(this.debugSettingsFeedId)) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
+        const { setting } = this.app as unknown as { setting: { open(): void; openTabById(id: string): void } };
+        setting.open();
+        setting.openTabById('doomscroll');
+        event.preventDefault();
+        event.stopPropagation();
       }, true);
     }
   }
