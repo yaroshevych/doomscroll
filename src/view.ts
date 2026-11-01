@@ -1228,23 +1228,12 @@ export class DoomscrollView extends ItemView {
   }
 
   private getBatchSettingsKey(): string {
-    const {
-      name: _name,
-      searchQuery: _searchQuery,
-      excludeFolders: _excludeFolders,
-      excludeTags: _excludeTags,
-      excludeGlobs: _excludeGlobs,
-      additionalFeeds: _additionalFeeds,
-      simplifiedView: _simplifiedView,
-      reduceAnimations: _reduceAnimations,
-      previewSize: _previewSize,
-      frontmatterBeforeProps: _frontmatterBeforeProps,
-      frontmatterAfterProps: _frontmatterAfterProps,
-      ...batchSettings
-    } = this.plugin.data.settings;
+    const { batchSize, infiniteScroll, headerScrollsWithFeed } = this.plugin.data.settings;
     const feedFilters = this.getActiveFeedFilters();
     return JSON.stringify({
-      ...batchSettings,
+      batchSize,
+      infiniteScroll,
+      headerScrollsWithFeed,
       feedFilters: {
         includeMediaOnlyNotes: feedFilters.includeMediaOnlyNotes,
         showNonMarkdownFiles: feedFilters.showNonMarkdownFiles,
