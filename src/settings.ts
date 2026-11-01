@@ -172,6 +172,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
             this.openPageNames.set(filters.id, pageName);
             setting
               .setName('Name')
+              .setDesc('This name appears in the interface and in the Obsidian command palette.')
               .addText((text) =>
                 text
                   .setValue(filters.name)
@@ -187,9 +188,8 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         {
           name: 'Feed options',
           render: (setting) => {
-            const container = setting.settingEl.parentElement!;
-            setting.settingEl.remove();
-            this.renderFeedOptions(container, filters);
+            setting.setClass('doomscroll-feed-options');
+            this.renderFeedOptions(setting.settingEl.createDiv('doomscroll-feed-options-list'), filters);
           },
         },
         {
@@ -245,7 +245,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
           name: 'Excluded folders',
           render: (setting) => {
             setting.setName('Excluded folders').setHeading();
-            const list = setting.settingEl.createDiv(
+            const list = setting.infoEl.createDiv(
               'doomscroll-excluded-folders-list'
             );
             this.renderExcludedFolders(list, filters);
@@ -721,6 +721,7 @@ export class DoomscrollSettingTab extends PluginSettingTab {
 
     const nameSetting = new Setting(feedGroup)
       .setName('Name')
+      .setDesc('This name appears in the interface and in the Obsidian command palette.')
       .addText((text) =>
         text.setValue(filters.name).onChange(async (value) => {
           filters.name = value;

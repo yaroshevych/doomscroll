@@ -546,6 +546,23 @@
   background: var(--background-secondary);
 }
 
+.doomscroll-feed-options {
+  display: block;
+}
+
+.doomscroll-feed-options > .setting-item-info,
+.doomscroll-feed-options > .setting-item-control {
+  display: none;
+}
+
+.setting-group .doomscroll-feed-options .doomscroll-feed-options-list > .setting-item:not(.setting-item-heading) {
+  padding-inline: 0;
+}
+
+.setting-group .doomscroll-feed-options .doomscroll-feed-options-list > .setting-item:not(.setting-item-heading)::before {
+  inset-inline: 0;
+}
+
 .doomscroll-excluded-folders-list {
   margin: 0;
   overflow: hidden;
