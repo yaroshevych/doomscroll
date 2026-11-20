@@ -97,5 +97,11 @@ function compileCharacterClass(body: string): string | null {
     }
   }
 
-  return `[${negated ? '^' : ''}${escaped}]`;
+  const characterClass = `[${negated ? '^' : ''}${escaped}]`;
+  try {
+    new RegExp(characterClass);
+    return characterClass;
+  } catch {
+    return null;
+  }
 }
