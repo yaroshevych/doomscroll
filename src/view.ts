@@ -640,7 +640,7 @@ export class DoomscrollView extends ItemView {
       } else if (indexRefreshed) {
         this.revalidateBatchHistory();
       } else if (previewModeChanged || previewSizeChanged) {
-        if (previewModeChanged) {
+        if (previewModeChanged || previewSizeChanged) {
           this.renderedSnippetCache.clear();
         }
         clearCardSizeCache();
@@ -1282,7 +1282,8 @@ export class DoomscrollView extends ItemView {
     snippetEl.classList.remove(
       'doomscroll-card-snippet-size-small',
       'doomscroll-card-snippet-size-medium',
-      'doomscroll-card-snippet-size-large'
+      'doomscroll-card-snippet-size-large',
+      'doomscroll-card-snippet-size-full'
     );
     snippetEl.classList.add(
       `doomscroll-card-snippet-size-${this.getPreviewSize()}`
@@ -1482,6 +1483,7 @@ export class DoomscrollView extends ItemView {
     }
 
     const simplified = this.isSimplifiedView();
+    const full = this.getPreviewSize() === 'full';
 
     try {
       await this.waitForDataviewIndex(isCancelled);
@@ -1499,7 +1501,9 @@ export class DoomscrollView extends ItemView {
 
       const content = await this.plugin.app.vault.cachedRead(file);
       if (!isCurrent()) return;
-      const markdown = preparePreviewMarkdown(content);
+      const markdown = full
+        ? preparePreviewMarkdown(content, 8_000, true)
+        : preparePreviewMarkdown(content);
       snippetEl.replaceChildren();
       const rendered = snippetEl.createDiv();
       // Keep the staging tree attached while Obsidian and third-party
@@ -1525,7 +1529,7 @@ export class DoomscrollView extends ItemView {
         await waitForBasesViewsToSettle(rendered, isCancelled);
         if (!isCurrent()) return;
 
-        prepared = prepareRenderedPreview(rendered, simplified);
+        prepared = prepareRenderedPreview(rendered, simplified, full);
       } finally {
         renderComponent.unload();
       }

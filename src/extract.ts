@@ -213,7 +213,8 @@ export function extractSnippet(content: string): string {
  */
 export function preparePreviewMarkdown(
   content: string,
-  maxChars = PREVIEW_SOURCE_MAX_CHARS
+  maxChars = PREVIEW_SOURCE_MAX_CHARS,
+  includePartialLine = false
 ): string {
   const lines = content.split('\n');
   const startIndex = frontmatterEndIndex(lines);
@@ -230,8 +231,8 @@ export function preparePreviewMarkdown(
     const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
 
     if (characterCount + line.length + 1 > maxChars) {
-      if (selected.length === 0 && line.length > 0) {
-        selected.push(line.slice(0, maxChars));
+      if ((selected.length === 0 || includePartialLine) && line.length > 0) {
+        selected.push(line.slice(0, Math.max(0, maxChars - characterCount)));
       }
       truncated = true;
       break;
@@ -312,7 +313,8 @@ function isMediaWikiEmbed(line: string): boolean {
  */
 export function prepareRenderedPreview(
   container: HTMLElement,
-  simplified: boolean
+  simplified: boolean,
+  full = false
 ): HTMLElement {
   const root = container.cloneNode(true) as HTMLElement;
 
@@ -348,13 +350,13 @@ export function prepareRenderedPreview(
 
   limitTablesAndCode(
     root,
-    simplified ? SIMPLE_PREVIEW_TABLE_ROW_LIMIT : PREVIEW_TABLE_ROW_LIMIT,
-    simplified ? SIMPLE_PREVIEW_CODE_LINE_LIMIT : PREVIEW_CODE_LINE_LIMIT
+    full ? Infinity : simplified ? SIMPLE_PREVIEW_TABLE_ROW_LIMIT : PREVIEW_TABLE_ROW_LIMIT,
+    full ? Infinity : simplified ? SIMPLE_PREVIEW_CODE_LINE_LIMIT : PREVIEW_CODE_LINE_LIMIT
   );
 
   if (simplified) {
     root
-      .querySelectorAll('hr, .footnotes, .footnote-backref')
+      .querySelectorAll(full ? 'hr, .footnote-backref' : 'hr, .footnotes, .footnote-backref')
       .forEach((element) => element.remove());
     root
       .querySelectorAll('script, style, iframe, object, embed, form')
@@ -380,10 +382,12 @@ export function prepareRenderedPreview(
   }
 
   removeEmptyPreviewElements(root);
-  limitTopLevelBlocks(
-    root,
-    simplified ? SIMPLE_PREVIEW_BLOCK_LIMIT : PREVIEW_BLOCK_LIMIT
-  );
+  if (!full) {
+    limitTopLevelBlocks(
+      root,
+      simplified ? SIMPLE_PREVIEW_BLOCK_LIMIT : PREVIEW_BLOCK_LIMIT
+    );
+  }
   return root;
 }
 

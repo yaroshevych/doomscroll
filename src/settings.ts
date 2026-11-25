@@ -605,13 +605,14 @@ export class DoomscrollSettingTab extends PluginSettingTab {
         render: (setting) => {
           setting
       .setName('Preview size')
-      .setDesc('How many lines of note text to show')
+      .setDesc('How many lines of note text to show. Full shows up to 8,000 characters.')
       .addDropdown((dropdown) =>
         dropdown
           .addOptions({
             small: 'Small',
             medium: 'Medium',
             large: 'Large',
+            full: 'Full',
           })
           .setValue(filters.previewSize)
           .onChange(async (value) => {

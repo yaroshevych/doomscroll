@@ -1,5 +1,5 @@
 export type OpenNoteBehavior = 'tab' | 'reuse' | 'window';
-export type PreviewSize = 'small' | 'medium' | 'large';
+export type PreviewSize = 'small' | 'medium' | 'large' | 'full';
 
 export interface FeedFilters {
   id: string;
@@ -45,7 +45,8 @@ export function isPreviewSize(value: unknown): value is PreviewSize {
   return (
     value === 'small' ||
     value === 'medium' ||
-    value === 'large'
+    value === 'large' ||
+    value === 'full'
   );
 }
 

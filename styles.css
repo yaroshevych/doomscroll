@@ -498,6 +498,20 @@
   max-height: calc(1.35rem * 12);
 }
 
+.doomscroll-card-snippet-markdown.doomscroll-card-snippet-size-full,
+.doomscroll-card-snippet-simple.doomscroll-card-snippet-size-full {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  max-height: none;
+}
+
+.doomscroll-card-snippet-size-full .bases-view,
+.doomscroll-card-snippet-size-full .bases-embed,
+.doomscroll-card-snippet-simple.doomscroll-card-snippet-size-full .doomscroll-preview-code {
+  max-height: none;
+}
+
 .doomscroll-loading {
   text-align: center;
   padding: 2rem;
